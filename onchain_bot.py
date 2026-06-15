@@ -47,9 +47,16 @@ except ImportError:
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.0.0"
-CONFIG_FILE = "onchain_config.json"
-HISTORY_FILE = "tx_history.json"
+VERSION = "1.1.0"
+
+# ── Platform Detection ──────────────────────────────────────────
+IS_TERMUX = os.path.isdir("/data/data/com.termux")
+IS_ANDROID = IS_TERMUX or os.path.exists("/system/build.prop")
+
+# Use script directory for config files (works on Termux & everywhere)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(_SCRIPT_DIR, "onchain_config.json")
+HISTORY_FILE = os.path.join(_SCRIPT_DIR, "tx_history.json")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -78,6 +85,13 @@ class C:
 # Disable colors if not a real terminal
 if not sys.stdout.isatty():
     C.disable()
+
+# ── Termux-safe emoji (some terminals may not render full emoji) ──
+E_CHECK  = "✅" if not IS_TERMUX else "[OK]"
+E_CROSS  = "❌" if not IS_TERMUX else "[ERR]"
+E_WARN   = "⚠️ " if not IS_TERMUX else "[!]"
+E_INFO   = "ℹ️ " if not IS_TERMUX else "[i]"
+E_TX     = "📜" if not IS_TERMUX else "[TX]"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -161,17 +175,22 @@ VALUE_PRESETS = {
 # ═══════════════════════════════════════════════════════════════
 
 def clear_screen():
-    """Clear terminal screen."""
-    os.system("cls" if os.name == "nt" else "clear")
+    """Clear terminal screen (works on Termux, Linux, macOS, Windows)."""
+    if IS_TERMUX:
+        # Termux: use ANSI escape or clear
+        print("\033[H\033[2J", end="", flush=True)
+    else:
+        os.system("cls" if os.name == "nt" else "clear")
 
 
 def banner():
     """Print application banner."""
+    platform_tag = f" {C.G}[Termux]{C.END}" if IS_TERMUX else ""
     print(f"""
 {C.CY}╔═══════════════════════════════════════════════════════════════╗
-║{C.BOLD}{C.W}              ⛓️  ONCHAIN AUTOMATION BOT v{VERSION}               {C.END}{C.CY}║
+║{C.BOLD}{C.W}              ONCHAIN AUTOMATION BOT v{VERSION}                  {C.END}{C.CY}║
 ║{C.DIM}  Auto Send · Swap · Bridge · Multi-wallet · Scheduler        {C.END}{C.CY}║
-╚═══════════════════════════════════════════════════════════════╝{C.END}
+╚═══════════════════════════════════════════════════════════════╝{C.END}{platform_tag}
 """)
 
 
@@ -180,19 +199,19 @@ def log(msg, color=C.W):
     print(f"  {C.DIM}[{ts}]{C.END} {color}{msg}{C.END}")
 
 
-def log_ok(msg):    log(f"✅ {msg}", C.G)
-def log_err(msg):   log(f"❌ {msg}", C.R)
-def log_warn(msg):  log(f"⚠️  {msg}", C.Y)
-def log_info(msg):  log(f"ℹ️  {msg}", C.CY)
+def log_ok(msg):    log(f"{E_CHECK} {msg}", C.G)
+def log_err(msg):   log(f"{E_CROSS} {msg}", C.R)
+def log_warn(msg):  log(f"{E_WARN} {msg}", C.Y)
+def log_info(msg):  log(f"{E_INFO} {msg}", C.CY)
 
 
 def log_tx(tx_hash, explorer=""):
     """Print transaction hash with optional explorer link."""
     if explorer:
         url = f"{explorer.rstrip('/')}/tx/{tx_hash}"
-        print(f"  {C.G}📜 TX: {url}{C.END}")
+        print(f"  {C.G}{E_TX} TX: {url}{C.END}")
     else:
-        print(f"  {C.G}📜 TX: {tx_hash}{C.END}")
+        print(f"  {C.G}{E_TX} TX: {tx_hash}{C.END}")
 
 
 def prompt(text, default=""):

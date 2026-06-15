@@ -3,6 +3,7 @@
   <img src="https://img.shields.io/badge/web3.py-7.x-orange?logo=ethereum&logoColor=white" alt="Web3">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/EVM-All_Chains-blueviolet" alt="EVM">
+  <img src="https://img.shields.io/badge/Termux-Android-brightgreen?logo=android&logoColor=white" alt="Termux">
 </p>
 
 <h1 align="center">⛓️ Onchain Automation Bot</h1>
@@ -33,6 +34,7 @@
 
 - Python 3.10 or higher
 - `web3` library
+- Works on: **Linux**, **macOS**, **Windows**, **Android (Termux)**
 
 ## 🚀 Quick Start
 
@@ -215,11 +217,120 @@ Here are some commonly used chain configurations:
 | TraderJoe | Avalanche | `0x60aE616a2155Ee3d9A68541Ba4544862310933d4` |
 | SpookySwap | Fantom | `0xF491e7B69E4244ad4002BC14e878a34207E38c29` |
 
+## 📱 Termux (Android) Setup
+
+Onchain Bot fully supports [Termux](https://termux.dev/) on Android. The bot auto-detects Termux and adapts its display for the mobile terminal.
+
+### Method 1: Auto Setup (Recommended)
+
+One command installs everything:
+
+```bash
+# 1. Install git first (if you don't have it)
+pkg install git
+
+# 2. Clone the repo
+git clone https://github.com/Limit99/onchain-bot.git
+cd onchain-bot
+
+# 3. Run the auto setup script
+bash setup_termux.sh
+
+# 4. Done! Run the bot
+python onchain_bot.py
+```
+
+The `setup_termux.sh` script will:
+- Update Termux packages
+- Install Python, build tools, libffi, openssl, rust (needed to compile web3)
+- Install web3 with the correct build flags for ARM
+- Verify everything works
+
+### Method 2: Manual Setup
+
+If you prefer to install manually:
+
+```bash
+# Update packages
+pkg update && pkg upgrade
+
+# Install required system packages
+pkg install python git build-essential libffi openssl rust binutils
+
+# Clone the repo
+git clone https://github.com/Limit99/onchain-bot.git
+cd onchain-bot
+
+# Upgrade pip
+pip install --upgrade pip setuptools wheel
+
+# Set build flags for Termux ARM architecture
+export CFLAGS="-Wno-error"
+export LDFLAGS="-L/data/data/com.termux/files/usr/lib"
+export C_INCLUDE_PATH="/data/data/com.termux/files/usr/include"
+
+# Install web3
+pip install web3
+
+# Run the bot
+python onchain_bot.py
+```
+
+### Termux Tips & Troubleshooting
+
+<details>
+<summary><b>💡 Tips for best experience</b></summary>
+
+- **Use landscape mode** — The menu looks best in landscape orientation
+- **Increase font size** — Pinch to zoom if text is too small
+- **Keep session alive** — Run `termux-wake-lock` to prevent Termux from sleeping during long scheduled tasks
+- **Notification** — Install `termux-api` + `Termux:API` app to get notifications:
+  ```bash
+  pkg install termux-api
+  ```
+- **Run in background** — Use `tmux` or `nohup` for scheduled tasks:
+  ```bash
+  pkg install tmux
+  tmux new -s bot
+  python onchain_bot.py
+  # Press Ctrl+B then D to detach
+  # Reattach: tmux attach -t bot
+  ```
+
+</details>
+
+<details>
+<summary><b>🔧 Common issues</b></summary>
+
+| Problem | Solution |
+|---|---|
+| `pip install web3` fails with build errors | Make sure you have: `pkg install build-essential libffi openssl rust binutils` |
+| `error: can't find Rust compiler` | Run: `pkg install rust` and retry |
+| `ModuleNotFoundError: No module named 'web3'` | Run: `pip install web3` (make sure you're using Termux's pip, not system) |
+| Script is slow to start | First import of web3 takes a few seconds on mobile — this is normal |
+| Emoji not showing correctly | The bot auto-detects Termux and uses text fallbacks `[OK]`, `[ERR]`, etc. |
+| Termux killed in background | Use `termux-wake-lock` or run inside `tmux` session |
+| Permission denied | Run: `chmod +x onchain_bot.py` |
+| Storage access needed | Run: `termux-setup-storage` for external storage access |
+
+</details>
+
+<details>
+<summary><b>📏 Minimum Termux requirements</b></summary>
+
+- **Termux** v0.118+ (from [F-Droid](https://f-droid.org/en/packages/com.termux/) — Google Play version is outdated)
+- **Android** 7.0+
+- **Storage** ~500MB (Python + web3 dependencies)
+- **RAM** 2GB+ recommended
+
+</details>
+
 ## 📁 File Structure
 
 ```
 onchain-bot/
 ├── onchain_bot.py          # Main bot script
+├── setup_termux.sh         # One-click Termux setup
 ├── requirements.txt        # Python dependencies
 ├── config.example.json     # Example configuration
 ├── README.md               # This file
