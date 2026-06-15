@@ -81,11 +81,15 @@ python -c "import pkg_resources" 2>/dev/null || {
 step "Installing web3 (this may take a few minutes)..."
 echo -e "  ${DIM}Building native extensions for Termux ARM...${END}"
 
-# Set build flags for Termux
+# Set build flags for Termux (critical for Rust/maturin packages like pydantic-core)
 export CFLAGS="-Wno-error"
 export LDFLAGS="-L/data/data/com.termux/files/usr/lib"
 export C_INCLUDE_PATH="/data/data/com.termux/files/usr/include"
+export ANDROID_API_LEVEL=$(getprop ro.build.version.sdk 2>/dev/null || echo 24)
+echo -e "  ${DIM}Android API level: ${ANDROID_API_LEVEL}${END}"
 
+# Install pydantic-core first (needs ANDROID_API_LEVEL for maturin/Rust build)
+pip install pydantic-core 2>&1 | tail -3
 pip install web3 2>&1 | tail -5
 ok "web3 installed"
 

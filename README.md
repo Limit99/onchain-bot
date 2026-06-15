@@ -305,6 +305,8 @@ python onchain_bot.py
 | Problem | Solution |
 |---|---|
 | `ModuleNotFoundError: No module named 'pkg_resources'` | Run: `pip install --force-reinstall setuptools` |
+| `maturin failed` / `Failed to determine Android API level` | Run: `export ANDROID_API_LEVEL=$(getprop ro.build.version.sdk)` then retry `pip install web3` |
+| `pydantic-core` build error | Set API level first: `export ANDROID_API_LEVEL=$(getprop ro.build.version.sdk)` then `pip install pydantic-core web3` |
 | `pip install web3` fails with build errors | Make sure you have: `pkg install build-essential libffi openssl rust binutils` |
 | `error: can't find Rust compiler` | Run: `pkg install rust` and retry |
 | `ModuleNotFoundError: No module named 'web3'` | Run: `pip install setuptools web3` |
