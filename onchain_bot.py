@@ -34,12 +34,33 @@ import traceback
 from datetime import datetime
 from decimal import Decimal
 
+# ── Fix for Termux/older pip: ensure pkg_resources is available ──
+try:
+    import pkg_resources  # noqa: F401
+except ImportError:
+    import subprocess
+    print("\n⏳ Installing missing setuptools...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install",
+                           "--quiet", "setuptools"])
+    import importlib
+    importlib.invalidate_caches()
+
 try:
     from web3 import Web3
-    from web3.middleware import ExtraDataToPOAMiddleware
     from eth_account import Account
+    # web3 >= 7.x
+    try:
+        from web3.middleware import ExtraDataToPOAMiddleware
+        _POA_MW = ExtraDataToPOAMiddleware
+        _WEB3_V7 = True
+    except ImportError:
+        # web3 5.x / 6.x fallback
+        from web3.middleware import geth_poa_middleware
+        _POA_MW = geth_poa_middleware
+        _WEB3_V7 = False
 except ImportError:
-    print("\n❌ web3 not installed. Run:\n   pip install web3\n")
+    print("\n❌ web3 not installed. Run:")
+    print("   pip install setuptools web3\n")
     sys.exit(1)
 
 
@@ -47,7 +68,7 @@ except ImportError:
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 # ── Platform Detection ──────────────────────────────────────────
 IS_TERMUX = os.path.isdir("/data/data/com.termux")
@@ -407,7 +428,7 @@ class BlockchainEngine:
         try:
             self.w3 = Web3(Web3.HTTPProvider(chain["rpc"], request_kwargs={"timeout": 30}))
             # POA middleware for BSC, Polygon, Avalanche, etc.
-            self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            self.w3.middleware_onion.inject(_POA_MW, layer=0)
 
             if self.w3.is_connected():
                 self.current_chain = chain_name
@@ -479,7 +500,8 @@ class BlockchainEngine:
 
         # Sign + send
         signed = self.w3.eth.account.sign_transaction(tx, private_key)
-        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction).hex()
+        raw_tx = signed.raw_transaction if hasattr(signed, "raw_transaction") else signed.rawTransaction
+        tx_hash = self.w3.eth.send_raw_transaction(raw_tx).hex()
 
         log_info(f"TX sent: {tx_hash}")
         log_info("Waiting for confirmation…")

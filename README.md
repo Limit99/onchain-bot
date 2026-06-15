@@ -304,9 +304,10 @@ python onchain_bot.py
 
 | Problem | Solution |
 |---|---|
+| `ModuleNotFoundError: No module named 'pkg_resources'` | Run: `pip install --force-reinstall setuptools` |
 | `pip install web3` fails with build errors | Make sure you have: `pkg install build-essential libffi openssl rust binutils` |
 | `error: can't find Rust compiler` | Run: `pkg install rust` and retry |
-| `ModuleNotFoundError: No module named 'web3'` | Run: `pip install web3` (make sure you're using Termux's pip, not system) |
+| `ModuleNotFoundError: No module named 'web3'` | Run: `pip install setuptools web3` |
 | Script is slow to start | First import of web3 takes a few seconds on mobile — this is normal |
 | Emoji not showing correctly | The bot auto-detects Termux and uses text fallbacks `[OK]`, `[ERR]`, etc. |
 | Termux killed in background | Use `termux-wake-lock` or run inside `tmux` session |

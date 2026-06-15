@@ -64,10 +64,18 @@ pkg install -y \
     2>/dev/null || true
 ok "System dependencies installed"
 
-# ── Step 3: Upgrade pip ─────────────────────────────────────────
-step "Upgrading pip..."
-pip install --upgrade pip setuptools wheel 2>/dev/null
-ok "pip upgraded"
+# ── Step 3: Upgrade pip & setuptools ────────────────────────────
+step "Upgrading pip & setuptools..."
+pip install --upgrade pip 2>/dev/null
+# IMPORTANT: install setuptools separately to ensure pkg_resources is available
+pip install --upgrade --force-reinstall setuptools wheel 2>/dev/null
+ok "pip & setuptools upgraded"
+
+# Verify pkg_resources is available (web3 needs it)
+python -c "import pkg_resources" 2>/dev/null || {
+    warn "pkg_resources missing, reinstalling setuptools..."
+    pip install --force-reinstall setuptools 2>/dev/null
+}
 
 # ── Step 4: Install Python packages ────────────────────────────
 step "Installing web3 (this may take a few minutes)..."
@@ -84,12 +92,21 @@ ok "web3 installed"
 # ── Step 5: Verify installation ────────────────────────────────
 step "Verifying installation..."
 python -c "
+import pkg_resources
 from web3 import Web3
 from eth_account import Account
-print('  web3     :', Web3.__module__)
+print('  web3     : OK')
 print('  account  : OK')
 print('  All good!')
-" || fail "web3 verification failed. Try: pip install web3 --no-cache-dir"
+" || {
+    warn "Trying to fix pkg_resources..."
+    pip install --force-reinstall setuptools 2>/dev/null
+    python -c "
+from web3 import Web3
+from eth_account import Account
+print('  Fixed! All good.')
+" || fail "web3 verification failed. Try: pip install setuptools web3 --no-cache-dir --force-reinstall"
+}
 ok "All packages verified"
 
 # ── Step 6: Set permissions ─────────────────────────────────────
