@@ -1,0 +1,42 @@
+{
+  "chains": {
+    "sepolia": {
+      "rpc": "https://rpc.sepolia.org",
+      "chain_id": 11155111,
+      "symbol": "ETH",
+      "explorer": "https://sepolia.etherscan.io",
+      "type": "testnet"
+    },
+    "bsc-testnet": {
+      "rpc": "https://data-seed-prebsc-1-s1.binance.org:8545",
+      "chain_id": 97,
+      "symbol": "tBNB",
+      "explorer": "https://testnet.bscscan.com",
+      "type": "testnet"
+    }
+  },
+  "wallets": [
+    {
+      "name": "wallet-1",
+      "address": "0xYOUR_WALLET_ADDRESS_HERE",
+      "private_key": "YOUR_PRIVATE_KEY_HERE"
+    }
+  ],
+  "tokens": {
+    "sepolia": {
+      "USDC": {
+        "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        "decimals": 6
+      }
+    }
+  },
+  "dex_routers": {
+    "sepolia": {
+      "uniswap-v2": {
+        "address": "0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008",
+        "weth": ""
+      }
+    }
+  },
+  "bridge_contracts": {}
+}

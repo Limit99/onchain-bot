@@ -1,0 +1,32 @@
+# ──── Config & Secrets (NEVER commit these) ────
+onchain_config.json
+tx_history.json
+
+# ──── Python ────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# ──── Virtual Environment ────
+.venv/
+venv/
+env/
+ENV/
+
+# ──── IDE ────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ──── OS ────
+.DS_Store
+Thumbs.db
+desktop.ini
