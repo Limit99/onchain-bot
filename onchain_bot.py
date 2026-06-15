@@ -41,10 +41,12 @@ except ImportError:
     import subprocess
     print("\n⏳ Installing missing setuptools...")
     subprocess.check_call([sys.executable, "-m", "pip", "install",
-                           "--quiet", "setuptools"])
-    import importlib
-    importlib.invalidate_caches()
+                           "--quiet", "--force-reinstall", "setuptools"])
+    # Restart script so Python picks up the new package cleanly
+    print("🔄 Restarting...")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
+_WEB3_IMPORT_ERR = None
 try:
     from web3 import Web3
     from eth_account import Account
@@ -52,15 +54,19 @@ try:
     try:
         from web3.middleware import ExtraDataToPOAMiddleware
         _POA_MW = ExtraDataToPOAMiddleware
-        _WEB3_V7 = True
     except ImportError:
         # web3 5.x / 6.x fallback
         from web3.middleware import geth_poa_middleware
         _POA_MW = geth_poa_middleware
-        _WEB3_V7 = False
-except ImportError:
-    print("\n❌ web3 not installed. Run:")
-    print("   pip install setuptools web3\n")
+except ImportError as e:
+    _WEB3_IMPORT_ERR = str(e)
+except Exception as e:
+    _WEB3_IMPORT_ERR = str(e)
+
+if _WEB3_IMPORT_ERR:
+    print(f"\n❌ Failed to import web3: {_WEB3_IMPORT_ERR}")
+    print("   Fix:")
+    print("   pip install --force-reinstall setuptools web3\n")
     sys.exit(1)
 
 
@@ -68,7 +74,7 @@ except ImportError:
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 
 # ── Platform Detection ──────────────────────────────────────────
 IS_TERMUX = os.path.isdir("/data/data/com.termux")
