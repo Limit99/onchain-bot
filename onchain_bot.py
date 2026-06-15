@@ -34,19 +34,8 @@ import traceback
 from datetime import datetime
 from decimal import Decimal
 
-# ── Fix for Termux/older pip: ensure pkg_resources is available ──
-try:
-    import pkg_resources  # noqa: F401
-except ImportError:
-    import subprocess
-    print("\n⏳ Installing missing setuptools...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install",
-                           "--quiet", "--force-reinstall", "setuptools"])
-    # Restart script so Python picks up the new package cleanly
-    print("🔄 Restarting...")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
-
-_WEB3_IMPORT_ERR = None
+# ── Import web3 (supports both v5.x and v7.x) ──────────────────
+_WEB3_ERR = None
 try:
     from web3 import Web3
     from eth_account import Account
@@ -56,17 +45,16 @@ try:
         _POA_MW = ExtraDataToPOAMiddleware
     except ImportError:
         # web3 5.x / 6.x fallback
-        from web3.middleware import geth_poa_middleware
-        _POA_MW = geth_poa_middleware
-except ImportError as e:
-    _WEB3_IMPORT_ERR = str(e)
+        try:
+            from web3.middleware import geth_poa_middleware
+            _POA_MW = geth_poa_middleware
+        except ImportError:
+            _POA_MW = None
 except Exception as e:
-    _WEB3_IMPORT_ERR = str(e)
-
-if _WEB3_IMPORT_ERR:
-    print(f"\n❌ Failed to import web3: {_WEB3_IMPORT_ERR}")
+    _WEB3_ERR = str(e)
+    print(f"\n❌ web3 import failed: {_WEB3_ERR}")
     print("   Fix:")
-    print("   pip install --force-reinstall setuptools web3\n")
+    print("   pip install web3\n")
     sys.exit(1)
 
 
@@ -74,7 +62,7 @@ if _WEB3_IMPORT_ERR:
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.1.2"
+VERSION = "1.2.0"
 
 # ── Platform Detection ──────────────────────────────────────────
 IS_TERMUX = os.path.isdir("/data/data/com.termux")
@@ -434,7 +422,8 @@ class BlockchainEngine:
         try:
             self.w3 = Web3(Web3.HTTPProvider(chain["rpc"], request_kwargs={"timeout": 30}))
             # POA middleware for BSC, Polygon, Avalanche, etc.
-            self.w3.middleware_onion.inject(_POA_MW, layer=0)
+            if _POA_MW:
+                self.w3.middleware_onion.inject(_POA_MW, layer=0)
 
             if self.w3.is_connected():
                 self.current_chain = chain_name
