@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              ONCHAIN AUTOMATION BOT v1.5.0                    ║
+║              ONCHAIN AUTOMATION BOT v1.6.0                    ║
 ║  Kirim · Swap · Bridge · Multi-wallet · Tugas Terjadwal       ║
 ╚═══════════════════════════════════════════════════════════════╝
 
@@ -62,60 +62,69 @@ except Exception as e:
 # KONSTANTA
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 # ── Database Chain ID ───────────────────────────────────────────
-# Maps chain_id → (name, symbol, explorer, network_type)
+# Maps chain_id → (name, symbol, explorer, network_type, rpc_url)
+# Semua chain dikenali otomatis dan ter-load saat pertama kali jalan.
 KNOWN_CHAINS = {
-    # ── Mainnets ──
-    1:        ("Ethereum",          "ETH",   "https://etherscan.io",              "mainnet"),
-    56:       ("BSC",               "BNB",   "https://bscscan.com",              "mainnet"),
-    137:      ("Polygon",           "MATIC", "https://polygonscan.com",          "mainnet"),
-    42161:    ("Arbitrum One",      "ETH",   "https://arbiscan.io",              "mainnet"),
-    10:       ("Optimism",          "ETH",   "https://optimistic.etherscan.io",  "mainnet"),
-    43114:    ("Avalanche",         "AVAX",  "https://snowtrace.io",             "mainnet"),
-    250:      ("Fantom",            "FTM",   "https://ftmscan.com",              "mainnet"),
-    8453:     ("Base",              "ETH",   "https://basescan.org",             "mainnet"),
-    324:      ("zkSync Era",        "ETH",   "https://explorer.zksync.io",       "mainnet"),
-    1101:     ("Polygon zkEVM",     "ETH",   "https://zkevm.polygonscan.com",    "mainnet"),
-    59144:    ("Linea",             "ETH",   "https://lineascan.build",          "mainnet"),
-    534352:   ("Scroll",            "ETH",   "https://scrollscan.com",           "mainnet"),
-    5000:     ("Mantle",            "MNT",   "https://mantlescan.xyz",           "mainnet"),
-    169:      ("Manta Pacific",     "ETH",   "https://pacific-explorer.manta.network", "mainnet"),
-    7777777:  ("Zora",              "ETH",   "https://explorer.zora.energy",     "mainnet"),
-    81457:    ("Blast",             "ETH",   "https://blastscan.io",             "mainnet"),
-    204:      ("opBNB",             "BNB",   "https://opbnbscan.com",            "mainnet"),
-    1284:     ("Moonbeam",          "GLMR",  "https://moonscan.io",              "mainnet"),
-    1285:     ("Moonriver",         "MOVR",  "https://moonriver.moonscan.io",    "mainnet"),
-    42220:    ("Celo",              "CELO",  "https://celoscan.io",              "mainnet"),
-    100:      ("Gnosis",            "xDAI",  "https://gnosisscan.io",            "mainnet"),
-    25:       ("Cronos",            "CRO",   "https://cronoscan.com",            "mainnet"),
-    1088:     ("Metis",             "METIS", "https://andromeda-explorer.metis.io", "mainnet"),
-    34443:    ("Mode",              "ETH",   "https://explorer.mode.network",    "mainnet"),
-    167000:   ("Taiko",             "ETH",   "https://taikoscan.io",             "mainnet"),
-    7560:     ("Cyber",             "ETH",   "https://cyberscan.co",             "mainnet"),
-    480:      ("World Chain",       "ETH",   "https://worldscan.org",            "mainnet"),
-    2741:     ("Abstract",          "ETH",   "https://abscan.org",               "mainnet"),
-    57073:    ("Ink",               "ETH",   "https://explorer.inkonchain.com",  "mainnet"),
-    130:      ("Unichain",          "ETH",   "https://uniscan.xyz",              "mainnet"),
-    146:      ("Sonic",             "S",     "https://sonicscan.org",            "mainnet"),
-    1868:     ("Soneium",           "ETH",   "https://soneium.blockscout.com",   "mainnet"),
-    80094:    ("Berachain",         "BERA",  "https://berascan.com",             "mainnet"),
-    # ── Testnets ──
-    11155111: ("Sepolia",           "ETH",   "https://sepolia.etherscan.io",     "testnet"),
-    17000:    ("Holesky",           "ETH",   "https://holesky.etherscan.io",     "testnet"),
-    97:       ("BSC Testnet",       "tBNB",  "https://testnet.bscscan.com",      "testnet"),
-    80002:    ("Polygon Amoy",      "MATIC", "https://amoy.polygonscan.com",     "testnet"),
-    421614:   ("Arbitrum Sepolia",  "ETH",   "https://sepolia.arbiscan.io",      "testnet"),
-    11155420: ("Optimism Sepolia",  "ETH",   "https://sepolia-optimism.etherscan.io", "testnet"),
-    43113:    ("Avalanche Fuji",    "AVAX",  "https://testnet.snowtrace.io",     "testnet"),
-    84532:    ("Base Sepolia",      "ETH",   "https://sepolia.basescan.org",     "testnet"),
-    534351:   ("Scroll Sepolia",    "ETH",   "https://sepolia.scrollscan.com",   "testnet"),
-    59141:    ("Linea Sepolia",     "ETH",   "https://sepolia.lineascan.build",  "testnet"),
-    300:      ("zkSync Sepolia",    "ETH",   "https://sepolia-era.zksync.network","testnet"),
-    168587773:("Blast Sepolia",     "ETH",   "https://sepolia.blastscan.io",     "testnet"),
-    80084:    ("Berachain Bartio",  "BERA",  "https://bartio.beratrail.io",      "testnet"),
-    1301:     ("Unichain Sepolia",  "ETH",   "https://sepolia.uniscan.xyz",      "testnet"),
+    # ══════════════════════  MAINNETS  ══════════════════════════
+    1:        ("Ethereum",          "ETH",   "https://etherscan.io",                       "mainnet", "https://eth.llamarpc.com"),
+    56:       ("BSC",               "BNB",   "https://bscscan.com",                        "mainnet", "https://bsc-dataseed.binance.org"),
+    137:      ("Polygon",           "MATIC", "https://polygonscan.com",                    "mainnet", "https://polygon-rpc.com"),
+    42161:    ("Arbitrum One",      "ETH",   "https://arbiscan.io",                        "mainnet", "https://arb1.arbitrum.io/rpc"),
+    10:       ("Optimism",          "ETH",   "https://optimistic.etherscan.io",            "mainnet", "https://mainnet.optimism.io"),
+    43114:    ("Avalanche",         "AVAX",  "https://snowtrace.io",                       "mainnet", "https://api.avax.network/ext/bc/C/rpc"),
+    250:      ("Fantom",            "FTM",   "https://ftmscan.com",                        "mainnet", "https://rpc.ftm.tools"),
+    8453:     ("Base",              "ETH",   "https://basescan.org",                       "mainnet", "https://mainnet.base.org"),
+    324:      ("zkSync Era",        "ETH",   "https://explorer.zksync.io",                 "mainnet", "https://mainnet.era.zksync.io"),
+    1101:     ("Polygon zkEVM",     "ETH",   "https://zkevm.polygonscan.com",              "mainnet", "https://zkevm-rpc.com"),
+    59144:    ("Linea",             "ETH",   "https://lineascan.build",                    "mainnet", "https://rpc.linea.build"),
+    534352:   ("Scroll",            "ETH",   "https://scrollscan.com",                     "mainnet", "https://rpc.scroll.io"),
+    5000:     ("Mantle",            "MNT",   "https://mantlescan.xyz",                     "mainnet", "https://rpc.mantle.xyz"),
+    169:      ("Manta Pacific",     "ETH",   "https://pacific-explorer.manta.network",     "mainnet", "https://pacific-rpc.manta.network/http"),
+    7777777:  ("Zora",              "ETH",   "https://explorer.zora.energy",               "mainnet", "https://rpc.zora.energy"),
+    81457:    ("Blast",             "ETH",   "https://blastscan.io",                       "mainnet", "https://rpc.blast.io"),
+    204:      ("opBNB",             "BNB",   "https://opbnbscan.com",                      "mainnet", "https://opbnb-mainnet-rpc.bnbchain.org"),
+    1284:     ("Moonbeam",          "GLMR",  "https://moonscan.io",                        "mainnet", "https://rpc.api.moonbeam.network"),
+    1285:     ("Moonriver",         "MOVR",  "https://moonriver.moonscan.io",              "mainnet", "https://rpc.api.moonriver.moonbeam.network"),
+    42220:    ("Celo",              "CELO",  "https://celoscan.io",                        "mainnet", "https://forno.celo.org"),
+    100:      ("Gnosis",            "xDAI",  "https://gnosisscan.io",                      "mainnet", "https://rpc.gnosischain.com"),
+    25:       ("Cronos",            "CRO",   "https://cronoscan.com",                      "mainnet", "https://evm.cronos.org"),
+    1088:     ("Metis",             "METIS", "https://andromeda-explorer.metis.io",         "mainnet", "https://andromeda.metis.io/?owner=1088"),
+    34443:    ("Mode",              "ETH",   "https://explorer.mode.network",              "mainnet", "https://mainnet.mode.network"),
+    167000:   ("Taiko",             "ETH",   "https://taikoscan.io",                       "mainnet", "https://rpc.taiko.xyz"),
+    7560:     ("Cyber",             "ETH",   "https://cyberscan.co",                       "mainnet", "https://cyber.alt.technology"),
+    480:      ("World Chain",       "ETH",   "https://worldscan.org",                      "mainnet", "https://worldchain-mainnet.g.alchemy.com/public"),
+    2741:     ("Abstract",          "ETH",   "https://abscan.org",                         "mainnet", "https://api.abstrachain.io"),
+    57073:    ("Ink",               "ETH",   "https://explorer.inkonchain.com",            "mainnet", "https://rpc-gel.inkonchain.com"),
+    130:      ("Unichain",          "ETH",   "https://uniscan.xyz",                        "mainnet", "https://mainnet.unichain.org"),
+    146:      ("Sonic",             "S",     "https://sonicscan.org",                      "mainnet", "https://rpc.soniclabs.com"),
+    1868:     ("Soneium",           "ETH",   "https://soneium.blockscout.com",             "mainnet", "https://rpc.soneium.org"),
+    80094:    ("Berachain",         "BERA",  "https://berascan.com",                       "mainnet", "https://rpc.berachain.com"),
+    196:      ("X Layer",           "OKB",   "https://www.okx.com/web3/explorer/xlayer",   "mainnet", "https://rpc.xlayer.tech"),
+    1135:     ("Lisk",              "ETH",   "https://blockscout.lisk.com",                "mainnet", "https://rpc.api.lisk.com"),
+    252:      ("Fraxtal",           "frxETH","https://fraxscan.com",                       "mainnet", "https://rpc.frax.com"),
+    660279:   ("Xai",               "XAI",   "https://explorer.xai-chain.net",             "mainnet", "https://xai-chain.net/rpc"),
+    255:      ("Kroma",             "ETH",   "https://kromascan.com",                      "mainnet", "https://api.kroma.network"),
+    # ══════════════════════  TESTNETS  ══════════════════════════
+    11155111: ("Sepolia",           "ETH",   "https://sepolia.etherscan.io",               "testnet", "https://rpc.sepolia.org"),
+    17000:    ("Holesky",           "ETH",   "https://holesky.etherscan.io",               "testnet", "https://ethereum-holesky-rpc.publicnode.com"),
+    97:       ("BSC Testnet",       "tBNB",  "https://testnet.bscscan.com",                "testnet", "https://data-seed-prebsc-1-s1.binance.org:8545"),
+    80002:    ("Polygon Amoy",      "MATIC", "https://amoy.polygonscan.com",               "testnet", "https://rpc-amoy.polygon.technology"),
+    421614:   ("Arbitrum Sepolia",  "ETH",   "https://sepolia.arbiscan.io",                "testnet", "https://sepolia-rollup.arbitrum.io/rpc"),
+    11155420: ("Optimism Sepolia",  "ETH",   "https://sepolia-optimism.etherscan.io",      "testnet", "https://sepolia.optimism.io"),
+    43113:    ("Avalanche Fuji",    "AVAX",  "https://testnet.snowtrace.io",               "testnet", "https://api.avax-test.network/ext/bc/C/rpc"),
+    84532:    ("Base Sepolia",      "ETH",   "https://sepolia.basescan.org",               "testnet", "https://sepolia.base.org"),
+    534351:   ("Scroll Sepolia",    "ETH",   "https://sepolia.scrollscan.com",             "testnet", "https://sepolia-rpc.scroll.io"),
+    59141:    ("Linea Sepolia",     "ETH",   "https://sepolia.lineascan.build",            "testnet", "https://rpc.sepolia.linea.build"),
+    300:      ("zkSync Sepolia",    "ETH",   "https://sepolia-era.zksync.network",         "testnet", "https://sepolia.era.zksync.dev"),
+    168587773:("Blast Sepolia",     "ETH",   "https://sepolia.blastscan.io",               "testnet", "https://sepolia.blast.io"),
+    80084:    ("Berachain Bartio",  "BERA",  "https://bartio.beratrail.io",                "testnet", "https://bartio.rpc.berachain.com"),
+    1301:     ("Unichain Sepolia",  "ETH",   "https://sepolia.uniscan.xyz",                "testnet", "https://sepolia.unichain.org"),
+    10200:    ("Gnosis Chiado",     "xDAI",  "https://gnosis-chiado.blockscout.com",       "testnet", "https://rpc.chiadochain.net"),
+    5003:     ("Mantle Sepolia",    "MNT",   "https://sepolia.mantlescan.xyz",             "testnet", "https://rpc.sepolia.mantle.xyz"),
+    41455:    ("Monad Testnet",     "MON",   "https://testnet.monadexplorer.com",          "testnet", "https://testnet-rpc.monad.xyz"),
 }
 
 # ── Deteksi Platform ────────────────────────────────────────────
@@ -314,7 +323,7 @@ def detect_chain(rpc_url):
             return None
         cid = w3.eth.chain_id
         if cid in KNOWN_CHAINS:
-            name, symbol, explorer, net_type = KNOWN_CHAINS[cid]
+            name, symbol, explorer, net_type, _rpc = KNOWN_CHAINS[cid]
             return (cid, name, symbol, explorer, net_type)
         else:
             net = "testnet" if "test" in rpc_url.lower() else "mainnet"
@@ -366,6 +375,27 @@ class Config:
             log_ok(f"Konfigurasi dimuat ({self.path})")
         else:
             log_info("Tidak ada konfigurasi — mulai dari awal.")
+        # Otomatis tambahkan semua chain yang dikenali
+        self._auto_populate_chains()
+
+    def _auto_populate_chains(self):
+        """Otomatis muat semua chain dari KNOWN_CHAINS yang belum ada di config."""
+        existing_names = set(self.data["chains"].keys())
+        existing_ids = {c["chain_id"] for c in self.data["chains"].values()}
+        added = 0
+        for cid, (name, symbol, explorer, net_type, rpc) in KNOWN_CHAINS.items():
+            if name not in existing_names and cid not in existing_ids:
+                self.data["chains"][name] = {
+                    "rpc": rpc,
+                    "chain_id": int(cid),
+                    "symbol": symbol.upper(),
+                    "explorer": explorer.rstrip("/"),
+                    "type": net_type,
+                }
+                added += 1
+        if added > 0:
+            self.save()
+            log_ok(f"{added} chain baru dimuat otomatis (total: {len(self.data['chains'])} chain)")
 
     def save(self):
         with open(self.path, "w") as f:
@@ -1009,11 +1039,41 @@ class CLI:
         if not chains:
             log_warn("Belum ada chain! Masuk ke Pengaturan → Tambah Chain dulu.")
             return None
-        self._print_chains()
-        name = prompt("Pilih chain")
+
+        choice = menu_select("Pilih Chain", [
+            ("1", "🌐 Lihat Mainnet"),
+            ("2", "🧪 Lihat Testnet"),
+            ("3", "📋 Lihat Semua"),
+            ("4", "🔍 Cari Chain"),
+        ])
+
+        if choice == "1":
+            self._print_chains(filter_type="mainnet")
+        elif choice == "2":
+            self._print_chains(filter_type="testnet")
+        elif choice == "3":
+            self._print_chains()
+        elif choice == "4":
+            keyword = prompt("Kata kunci (nama/simbol)").lower()
+            matches = {n: c for n, c in chains.items()
+                       if keyword in n.lower() or keyword in c["symbol"].lower()}
+            if not matches:
+                log_err(f"Tidak ditemukan chain dengan kata kunci '{keyword}'")
+                return None
+            self._print_chains(custom=matches)
+        else:
+            self._print_chains()
+
+        name = prompt("Ketik nama chain")
         if name not in chains:
-            log_err(f"Chain '{name}' tidak ditemukan")
-            return None
+            # Coba cari case-insensitive
+            for cn in chains:
+                if cn.lower() == name.lower():
+                    name = cn
+                    break
+            else:
+                log_err(f"Chain '{name}' tidak ditemukan")
+                return None
         if not self.engine.connect(name):
             return None
         return name
@@ -1051,12 +1111,26 @@ class CLI:
 
     # ── Printer ─────────────────────────────────────────────────
 
-    def _print_chains(self):
-        chains = self.config.get_chains()
-        print(f"\n  {C.BOLD}Daftar Chain:{C.END}")
-        for name, c in chains.items():
-            net = f"{C.G}mainnet{C.END}" if c["type"] == "mainnet" else f"{C.Y}testnet{C.END}"
-            print(f"    • {C.CY}{name}{C.END} ({c['symbol']}) — ID {c['chain_id']} — {net}")
+    def _print_chains(self, filter_type=None, custom=None):
+        chains = custom if custom else self.config.get_chains()
+        if filter_type:
+            chains = {n: c for n, c in chains.items() if c.get("type") == filter_type}
+
+        mainnets = {n: c for n, c in chains.items() if c.get("type") == "mainnet"}
+        testnets = {n: c for n, c in chains.items() if c.get("type") == "testnet"}
+
+        def _print_group(label, group):
+            if not group:
+                return
+            print(f"\n  {C.BOLD}{label} ({len(group)}):{C.END}")
+            for name, c in sorted(group.items()):
+                print(f"    • {C.CY}{name}{C.END} ({c['symbol']}) — ID {c['chain_id']}")
+
+        if mainnets:
+            _print_group("🌐 Mainnet", mainnets)
+        if testnets:
+            _print_group("🧪 Testnet", testnets)
+        print()
 
     def _print_wallets(self):
         wallets = self.config.get_wallets()
@@ -1083,28 +1157,62 @@ class CLI:
                 break
 
             elif choice == "1":
-                rpc = prompt("URL RPC")
-                if not rpc:
-                    continue
-                log_info("Mendeteksi chain...")
-                detected = detect_chain(rpc)
-                if detected:
-                    cid, d_name, d_symbol, d_explorer, d_net = detected
-                    log_ok(f"Terdeteksi: {d_name} (Chain ID: {cid}, {d_symbol}, {d_net})")
-                    name     = prompt("Nama chain", d_name)
-                    chain_id = prompt("Chain ID", str(cid))
-                    symbol   = prompt("Simbol native", d_symbol)
-                    explorer = prompt("URL Explorer", d_explorer)
-                    net_type = prompt("Tipe (mainnet/testnet)", d_net)
-                else:
-                    log_warn("Tidak bisa deteksi otomatis. Masukkan manual:")
-                    name     = prompt("Nama chain (misal: ethereum, bsc-testnet)")
-                    chain_id = prompt("Chain ID (misal: 1, 56, 421614)")
-                    symbol   = prompt("Simbol native (misal: ETH, BNB)")
+                sub = menu_select("Tambah Chain", [
+                    ("1", "🔍 Masukkan RPC (auto-deteksi)"),
+                    ("2", "✏️  Masukkan manual (chain kustom)"),
+                    ("3", "🔄 Ganti RPC chain yang sudah ada"),
+                ])
+                if sub == "1":
+                    rpc = prompt("URL RPC")
+                    if not rpc:
+                        continue
+                    log_info("Mendeteksi chain...")
+                    detected = detect_chain(rpc)
+                    if detected:
+                        cid, d_name, d_symbol, d_explorer, d_net = detected
+                        log_ok(f"Terdeteksi: {d_name} (Chain ID: {cid}, {d_symbol}, {d_net})")
+                        name     = prompt("Nama chain", d_name)
+                        chain_id = prompt("Chain ID", str(cid))
+                        symbol   = prompt("Simbol native", d_symbol)
+                        explorer = prompt("URL Explorer", d_explorer)
+                        net_type = prompt("Tipe (mainnet/testnet)", d_net)
+                    else:
+                        log_warn("Tidak bisa deteksi otomatis. Masukkan manual:")
+                        name     = prompt("Nama chain (misal: ethereum, bsc-testnet)")
+                        chain_id = prompt("Chain ID (misal: 1, 56, 421614)")
+                        symbol   = prompt("Simbol native (misal: ETH, BNB)")
+                        explorer = prompt("URL Explorer (opsional)", "")
+                        net_type = prompt("Tipe (mainnet/testnet)", "mainnet")
+                    self.config.add_chain(name, rpc, chain_id, symbol, explorer, net_type)
+                    log_ok(f"Chain '{name}' berhasil ditambahkan!")
+                elif sub == "2":
+                    name     = prompt("Nama chain")
+                    rpc      = prompt("URL RPC")
+                    chain_id = prompt("Chain ID")
+                    symbol   = prompt("Simbol native")
                     explorer = prompt("URL Explorer (opsional)", "")
                     net_type = prompt("Tipe (mainnet/testnet)", "mainnet")
-                self.config.add_chain(name, rpc, chain_id, symbol, explorer, net_type)
-                log_ok(f"Chain '{name}' berhasil ditambahkan!")
+                    self.config.add_chain(name, rpc, chain_id, symbol, explorer, net_type)
+                    log_ok(f"Chain '{name}' berhasil ditambahkan!")
+                elif sub == "3":
+                    self._print_chains()
+                    name = prompt("Nama chain yang mau diganti RPC-nya")
+                    chains = self.config.get_chains()
+                    matched = None
+                    for cn in chains:
+                        if cn.lower() == name.lower():
+                            matched = cn
+                            break
+                    if not matched:
+                        log_err(f"Chain '{name}' tidak ditemukan")
+                        continue
+                    old_rpc = chains[matched].get("rpc", "?")
+                    log_info(f"RPC saat ini: {old_rpc}")
+                    new_rpc = prompt("RPC baru")
+                    if new_rpc:
+                        c = chains[matched]
+                        self.config.add_chain(matched, new_rpc, c["chain_id"], c["symbol"], c.get("explorer",""), c.get("type","mainnet"))
+                        log_ok(f"RPC untuk '{matched}' berhasil diganti!")
 
             elif choice == "2":
                 label   = prompt("Label wallet (misal: utama, hot1)")
