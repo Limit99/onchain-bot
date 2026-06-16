@@ -2,190 +2,200 @@
   <img src="https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/web3.py-7.x-orange?logo=ethereum&logoColor=white" alt="Web3">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-  <img src="https://img.shields.io/badge/EVM-All_Chains-blueviolet" alt="EVM">
+  <img src="https://img.shields.io/badge/EVM-Semua_Chain-blueviolet" alt="EVM">
   <img src="https://img.shields.io/badge/Termux-Android-brightgreen?logo=android&logoColor=white" alt="Termux">
 </p>
 
 <h1 align="center">⛓️ Onchain Automation Bot</h1>
 
 <p align="center">
-  <b>Automate on-chain transactions across ANY EVM chain</b><br>
-  Send · Swap · Bridge · Multi-wallet · Scheduler
+  <b>Otomatisasi transaksi on-chain di SEMUA chain EVM</b><br>
+  Kirim · Swap · Bridge · Multi-wallet · Penjadwal
 </p>
 
 ---
 
-## ✨ Features
+## ✨ Fitur
 
-| Feature | Description |
+| Fitur | Deskripsi |
 |---|---|
-| 💸 **Send** | Send native tokens (ETH, BNB, MATIC, etc.) to any address |
-| 📤 **Multi-Send** | Batch send to multiple addresses in one go |
-| 🎲 **Random Send** | Auto-generate random addresses and send to them |
-| 🔄 **Swap** | Swap tokens via any Uniswap V2-compatible DEX |
-| 🌉 **Bridge** | Bridge tokens across chains (generic bridge support) |
-| 👛 **Multi-Wallet** | Manage multiple wallets with round-robin or random selection |
-| ⏰ **Scheduler** | Set up recurring send/swap tasks that run automatically |
-| 🌐 **Any EVM Chain** | Works with ANY EVM chain — just add the RPC URL |
-| 🧪 **Testnet Ready** | Full support for testnets (Sepolia, BSC Testnet, etc.) |
-| 📜 **TX History** | All transactions logged locally for tracking |
+| 💸 **Kirim** | Kirim token native (ETH, BNB, MATIC, dll.) ke alamat manapun |
+| 📤 **Multi-Kirim** | Kirim batch ke banyak alamat sekaligus |
+| 🎲 **Kirim Acak** | Buat alamat acak otomatis dan kirim ke masing-masing |
+| 🔄 **Swap** | Tukar token via DEX kompatibel Uniswap V2 |
+| 🌉 **Bridge** | Bridge token antar chain (dukungan bridge generik) |
+| 👛 **Multi-Wallet** | Kelola banyak wallet dengan round-robin atau acak |
+| ⏰ **Penjadwal** | Atur tugas kirim/swap berulang yang jalan otomatis |
+| 🌐 **Semua Chain EVM** | Berjalan di SEMUA chain EVM — cukup tambahkan URL RPC |
+| 🧪 **Siap Testnet** | Dukungan penuh untuk testnet (Sepolia, BSC Testnet, dll.) |
+| 📜 **Riwayat TX** | Semua transaksi tercatat lokal untuk pelacakan |
+| 🔍 **Auto-Deteksi Chain** | Cukup masukkan RPC, chain ID/nama/simbol terdeteksi otomatis |
 
-## 📋 Requirements
+## 📋 Kebutuhan
 
-- Python 3.10 or higher
-- `web3` library
-- Works on: **Linux**, **macOS**, **Windows**, **Android (Termux)**
+- Python 3.10 atau lebih tinggi
+- Library `web3`
+- Berjalan di: **Linux**, **macOS**, **Windows**, **Android (Termux)**
 
-## 🚀 Quick Start
+## 🚀 Mulai Cepat
 
-### 1. Clone the repository
+### 1. Clone repository
 
 ```bash
 git clone https://github.com/Limit99/onchain-bot.git
 cd onchain-bot
 ```
 
-### 2. Install dependencies
+### 2. Install dependensi
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run the bot
+### 3. Jalankan bot
 
 ```bash
 python onchain_bot.py
 ```
 
-### 4. First-time setup
+### 4. Pengaturan pertama kali
 
-When you run the bot for the first time, you'll need to configure:
+Saat menjalankan bot untuk pertama kali, kamu perlu mengatur:
 
-1. **Add a Chain** — Enter the RPC URL, Chain ID, and native token symbol
-2. **Add a Wallet** — Enter your wallet address and private key
-3. **Start transacting!**
+1. **Tambah Chain** — Masukkan URL RPC (chain ID, nama, simbol terdeteksi otomatis!)
+2. **Tambah Wallet** — Masukkan alamat wallet dan private key
+3. **Mulai bertransaksi!**
 
-## 📖 Usage Guide
+## 📖 Panduan Penggunaan
 
-### ⚙️ Setup & Configuration
+### ⚙️ Pengaturan & Konfigurasi
 
-Before using any feature, you need to add at least one chain and one wallet.
+Sebelum menggunakan fitur apapun, kamu perlu menambahkan minimal satu chain dan satu wallet.
 
-#### Adding a Chain
+#### Menambahkan Chain
 
-```
-Select: 1 (Add Chain)
-  ▸ Chain name: sepolia
-  ▸ RPC URL: https://rpc.sepolia.org
-  ▸ Chain ID: 11155111
-  ▸ Native symbol: ETH
-  ▸ Explorer URL: https://sepolia.etherscan.io
-  ▸ Type: testnet
-```
-
-#### Adding a Wallet
+Cukup masukkan URL RPC, bot akan otomatis mendeteksi semua detail chain:
 
 ```
-Select: 2 (Add Wallet)
-  ▸ Wallet label: main
-  ▸ Address: 0xYourAddress...
-  ▸ Private key: YourPrivateKey...
+Pilih: 1 (Tambah Chain)
+  ▸ URL RPC: https://rpc.sepolia.org
+  [OK] Terdeteksi: Sepolia (Chain ID: 11155111, ETH, testnet)
+  ▸ Nama chain [Sepolia]:           ← tekan Enter untuk auto
+  ▸ Chain ID [11155111]:             ← tekan Enter untuk auto
+  ▸ Simbol native [ETH]:            ← tekan Enter untuk auto
+  ▸ URL Explorer [https://...]:     ← tekan Enter untuk auto
+  ▸ Tipe [testnet]:                 ← tekan Enter untuk auto
 ```
 
-### 💸 Send Native Token
+> 50+ chain yang dikenali otomatis: Ethereum, BSC, Polygon, Arbitrum, Optimism, Base, Avalanche, Fantom, zkSync, Linea, Scroll, Blast, Mantle, Berachain, Sonic, Monad, dan semua testnetnya.
 
-Send native tokens (ETH/BNB/MATIC/etc.) to a single address.
-
-Choose from preset amounts:
-- `0.1` — Standard amount
-- `0.001` — Small amount
-- `0.0001` — Micro amount
-- `Custom` — Enter any amount
-
-### 📤 Multi-Send (Batch)
-
-Send tokens to multiple addresses in one batch:
-
-1. Select chain and wallet(s)
-2. Enter recipient addresses one by one
-3. Choose amount per transaction
-4. Set delay between transactions
-5. Confirm and execute
-
-**Wallet modes:**
-- **Single** — Use one wallet for all transactions
-- **All (Round-Robin)** — Cycle through wallets
-- **Random** — Pick a random wallet for each TX
-
-### 🎲 Send to Random Addresses
-
-The bot generates cryptographically random Ethereum addresses and sends tokens to each:
-
-1. Select chain and wallet(s)
-2. Choose how many random addresses to generate
-3. Select amount
-4. Execute
-
-> Great for testnet activity / interaction farming.
-
-### 🔄 Swap Tokens (DEX)
-
-Swap tokens via any Uniswap V2-compatible DEX router:
-
-**Supported swap types:**
-- Native → Token (e.g., ETH → USDC)
-- Token → Native (e.g., USDC → ETH)
-- Token → Token (e.g., USDC → WETH)
-
-**Setup required:** Add a DEX router in Setup first.
+#### Menambahkan Wallet
 
 ```
-Select: 3 (Add DEX Router)
-  ▸ Chain name: ethereum
-  ▸ DEX name: uniswap-v2
-  ▸ Router address: 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+Pilih: 2 (Tambah Wallet)
+  ▸ Label wallet: utama
+  ▸ Alamat (0x…): 0xAlamatKamu...
+  ▸ Private key: PrivateKeyKamu...
 ```
 
-### 🌉 Bridge Tokens
+### 💸 Kirim Token Native
 
-Bridge native tokens to another chain:
+Kirim token native (ETH/BNB/MATIC/dll.) ke satu alamat.
 
-1. Configure bridge contract in Setup
-2. Select the bridge
-3. Choose amount
-4. Execute
+Pilih dari jumlah preset:
+- `0.1` — Jumlah standar
+- `0.001` — Jumlah kecil
+- `0.0001` — Jumlah mikro
+- `Kustom` — Masukkan jumlah bebas
 
-> ⚠️ Bridge contract ABIs vary significantly between protocols. The default implementation uses a generic `bridge(uint256, address)` interface. You may need to modify the calldata encoding for your specific bridge.
+### 📤 Multi-Kirim (Batch)
 
-### ⏰ Scheduled Tasks
+Kirim token ke banyak alamat dalam satu batch:
 
-Set up recurring transactions that execute automatically:
+1. Pilih chain dan wallet
+2. Masukkan alamat penerima satu per satu
+3. Pilih jumlah per transaksi
+4. Atur jeda antar transaksi
+5. Konfirmasi dan jalankan
 
-- **Recurring Send** — Auto-send at fixed intervals
-- **Recurring Swap** — Auto-swap at fixed intervals
-- Supports random addresses per run
-- Background execution (non-blocking)
+**Mode wallet:**
+- **Single** — Gunakan satu wallet untuk semua transaksi
+- **All (Round-Robin)** — Putar giliran antar wallet
+- **Random** — Pilih wallet acak untuk setiap TX
+
+### 🎲 Kirim ke Alamat Acak
+
+Bot membuat alamat Ethereum acak secara kriptografis dan mengirim token ke masing-masing:
+
+1. Pilih chain dan wallet
+2. Pilih berapa alamat acak yang dibuat
+3. Pilih jumlah
+4. Jalankan
+
+> Cocok untuk aktivitas testnet / farming interaksi.
+
+### 🔄 Swap Token (DEX)
+
+Tukar token via DEX router kompatibel Uniswap V2:
+
+**Tipe swap yang didukung:**
+- Native → Token (misal: ETH → USDC)
+- Token → Native (misal: USDC → ETH)
+- Token → Token (misal: USDC → WETH)
+
+**Perlu setup:** Tambah DEX router di Pengaturan dulu.
 
 ```
-  ▸ Interval (seconds): 3600    # Every 1 hour
-  ▸ Task name: hourly-send
+Pilih: 3 (Tambah DEX Router)
+  ▸ Nama chain: ethereum
+  ▸ Nama DEX: uniswap-v2
+  ▸ Alamat router: 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 ```
 
-### 💰 Check Balances
+### 🌉 Bridge Token
 
-View native token and ERC-20 token balances for all configured wallets on any chain.
+Bridge token native ke chain lain:
 
-### 📜 Transaction History
+1. Konfigurasi kontrak bridge di Pengaturan
+2. Pilih bridge
+3. Pilih jumlah
+4. Jalankan
 
-View the last 20 transactions with status, chain, type, addresses, and TX hashes.
+> ⚠️ ABI kontrak bridge sangat bervariasi antar protokol. Implementasi default menggunakan interface generik `bridge(uint256, address)`. Kamu mungkin perlu menyesuaikan encoding calldata untuk bridge spesifik kamu.
 
-## 🔧 Popular Chain Configs
+### ⏰ Tugas Terjadwal
 
-Here are some commonly used chain configurations:
+Atur transaksi berulang yang jalan otomatis:
 
-### Mainnets
+- **Kirim Berulang** — Kirim otomatis pada interval tetap
+- **Swap Berulang** — Swap otomatis pada interval tetap
+- Mendukung alamat acak per eksekusi
+- Jalan di latar belakang (tidak mengganggu menu)
+- Status live di Menu Utama
+- Log tersimpan, bisa dilihat kapan saja
 
-| Chain | RPC URL | Chain ID | Symbol |
+```
+  ▸ Interval (detik): 3600    # Setiap 1 jam
+  ▸ Nama tugas: kirim-harian
+```
+
+Setelah penjadwal dimulai, kamu bisa kembali ke Menu Utama dan tetap menggunakan bot untuk hal lain. Tugas akan tetap berjalan di latar belakang.
+
+### 💰 Cek Saldo
+
+Lihat saldo token native dan ERC-20 untuk semua wallet yang dikonfigurasi di chain manapun.
+
+### 📜 Riwayat Transaksi
+
+Lihat 20 transaksi terakhir dengan status, chain, tipe, alamat, dan hash TX.
+
+## 🔧 Konfigurasi Chain Populer
+
+Berikut beberapa konfigurasi chain yang sering digunakan:
+
+### Mainnet
+
+| Chain | URL RPC | Chain ID | Simbol |
 |---|---|---|---|
 | Ethereum | `https://eth.llamarpc.com` | 1 | ETH |
 | BSC | `https://bsc-dataseed.binance.org` | 56 | BNB |
@@ -196,19 +206,19 @@ Here are some commonly used chain configurations:
 | Base | `https://mainnet.base.org` | 8453 | ETH |
 | Fantom | `https://rpc.ftm.tools` | 250 | FTM |
 
-### Testnets
+### Testnet
 
-| Chain | RPC URL | Chain ID | Symbol |
+| Chain | URL RPC | Chain ID | Simbol |
 |---|---|---|---|
 | Sepolia | `https://rpc.sepolia.org` | 11155111 | ETH |
 | BSC Testnet | `https://data-seed-prebsc-1-s1.binance.org:8545` | 97 | tBNB |
-| Mumbai | `https://rpc-mumbai.maticvigil.com` | 80001 | MATIC |
+| Polygon Amoy | `https://rpc-amoy.polygon.technology` | 80002 | MATIC |
 | Arbitrum Sepolia | `https://sepolia-rollup.arbitrum.io/rpc` | 421614 | ETH |
 | Base Sepolia | `https://sepolia.base.org` | 84532 | ETH |
 
-### Popular DEX Routers
+### DEX Router Populer
 
-| DEX | Chain | Router Address |
+| DEX | Chain | Alamat Router |
 |---|---|---|
 | Uniswap V2 | Ethereum | `0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D` |
 | PancakeSwap V2 | BSC | `0x10ED43C718714eb63d5aA57B78B54704E256024E` |
@@ -217,54 +227,54 @@ Here are some commonly used chain configurations:
 | TraderJoe | Avalanche | `0x60aE616a2155Ee3d9A68541Ba4544862310933d4` |
 | SpookySwap | Fantom | `0xF491e7B69E4244ad4002BC14e878a34207E38c29` |
 
-## 📱 Termux (Android) Setup
+## 📱 Setup Termux (Android)
 
-Onchain Bot fully supports [Termux](https://termux.dev/) on Android. The bot auto-detects Termux and adapts its display for the mobile terminal.
+Onchain Bot mendukung penuh [Termux](https://termux.dev/) di Android. Bot otomatis mendeteksi Termux dan menyesuaikan tampilannya untuk terminal mobile.
 
-### Method 1: Auto Setup (Recommended)
+### Metode 1: Setup Otomatis (Disarankan)
 
-One command installs everything:
+Satu perintah untuk install semuanya:
 
 ```bash
-# 1. Install git first (if you don't have it)
+# 1. Install git dulu (jika belum ada)
 pkg install git
 
-# 2. Clone the repo
+# 2. Clone repo
 git clone https://github.com/Limit99/onchain-bot.git
 cd onchain-bot
 
-# 3. Run the auto setup script
+# 3. Jalankan script setup otomatis
 bash setup_termux.sh
 
-# 4. Done! Run the bot
+# 4. Selesai! Jalankan bot
 python onchain_bot.py
 ```
 
-The `setup_termux.sh` script will:
-- Update Termux packages
-- Install Python, build tools, libffi, openssl, rust (needed to compile web3)
-- Install web3 with the correct build flags for ARM
-- Verify everything works
+Script `setup_termux.sh` akan:
+- Update paket Termux
+- Install Python, build tools, libffi, openssl, rust (dibutuhkan untuk compile web3)
+- Install web3 dengan flag build yang benar untuk ARM
+- Verifikasi semuanya berjalan
 
-### Method 2: Manual Setup
+### Metode 2: Setup Manual
 
-If you prefer to install manually:
+Jika kamu ingin install manual:
 
 ```bash
-# Update packages
+# Update paket
 pkg update && pkg upgrade
 
-# Install required system packages
+# Install paket sistem yang dibutuhkan
 pkg install python git build-essential libffi openssl rust binutils
 
-# Clone the repo
+# Clone repo
 git clone https://github.com/Limit99/onchain-bot.git
 cd onchain-bot
 
 # Upgrade pip
 pip install --upgrade pip setuptools wheel
 
-# Set build flags for Termux ARM architecture
+# Set flag build untuk arsitektur ARM Termux
 export CFLAGS="-Wno-error"
 export LDFLAGS="-L/data/data/com.termux/files/usr/lib"
 export C_INCLUDE_PATH="/data/data/com.termux/files/usr/include"
@@ -272,106 +282,106 @@ export C_INCLUDE_PATH="/data/data/com.termux/files/usr/include"
 # Install web3
 pip install web3
 
-# Run the bot
+# Jalankan bot
 python onchain_bot.py
 ```
 
-### Termux Tips & Troubleshooting
+### Tips & Troubleshooting Termux
 
 <details>
-<summary><b>💡 Tips for best experience</b></summary>
+<summary><b>💡 Tips untuk pengalaman terbaik</b></summary>
 
-- **Use landscape mode** — The menu looks best in landscape orientation
-- **Increase font size** — Pinch to zoom if text is too small
-- **Keep session alive** — Run `termux-wake-lock` to prevent Termux from sleeping during long scheduled tasks
-- **Notification** — Install `termux-api` + `Termux:API` app to get notifications:
+- **Gunakan mode landscape** — Menu terlihat lebih baik dalam orientasi landscape
+- **Perbesar font** — Cubit untuk zoom jika teks terlalu kecil
+- **Jaga sesi tetap aktif** — Jalankan `termux-wake-lock` untuk mencegah Termux tidur saat tugas terjadwal berjalan lama
+- **Notifikasi** — Install `termux-api` + aplikasi `Termux:API` untuk dapat notifikasi:
   ```bash
   pkg install termux-api
   ```
-- **Run in background** — Use `tmux` or `nohup` for scheduled tasks:
+- **Jalan di latar belakang** — Gunakan `tmux` atau `nohup` untuk tugas terjadwal:
   ```bash
   pkg install tmux
   tmux new -s bot
   python onchain_bot.py
-  # Press Ctrl+B then D to detach
-  # Reattach: tmux attach -t bot
+  # Tekan Ctrl+B lalu D untuk detach
+  # Untuk kembali: tmux attach -t bot
   ```
 
 </details>
 
 <details>
-<summary><b>🔧 Common issues</b></summary>
+<summary><b>🔧 Masalah umum</b></summary>
 
-| Problem | Solution |
+| Masalah | Solusi |
 |---|---|
-| `ModuleNotFoundError: No module named 'pkg_resources'` | Run: `pip install --force-reinstall setuptools` |
-| `maturin failed` / `Failed to determine Android API level` | Run: `export ANDROID_API_LEVEL=$(getprop ro.build.version.sdk)` then retry `pip install web3` |
-| `pydantic-core` build error | Set API level first: `export ANDROID_API_LEVEL=$(getprop ro.build.version.sdk)` then `pip install pydantic-core web3` |
-| `pip install web3` fails with build errors | Make sure you have: `pkg install build-essential libffi openssl rust binutils` |
-| `error: can't find Rust compiler` | Run: `pkg install rust` and retry |
-| `ModuleNotFoundError: No module named 'web3'` | Run: `pip install setuptools web3` |
-| Script is slow to start | First import of web3 takes a few seconds on mobile — this is normal |
-| Emoji not showing correctly | The bot auto-detects Termux and uses text fallbacks `[OK]`, `[ERR]`, etc. |
-| Termux killed in background | Use `termux-wake-lock` or run inside `tmux` session |
-| Permission denied | Run: `chmod +x onchain_bot.py` |
-| Storage access needed | Run: `termux-setup-storage` for external storage access |
+| `ModuleNotFoundError: No module named 'pkg_resources'` | Jalankan: `pip install --force-reinstall setuptools` |
+| `maturin failed` / `Failed to determine Android API level` | Jalankan: `export ANDROID_API_LEVEL=$(getprop ro.build.version.sdk)` lalu ulangi `pip install web3` |
+| Error build `pydantic-core` | Set API level dulu: `export ANDROID_API_LEVEL=$(getprop ro.build.version.sdk)` lalu `pip install pydantic-core web3` |
+| `pip install web3` gagal dengan error build | Pastikan sudah install: `pkg install build-essential libffi openssl rust binutils` |
+| `error: can't find Rust compiler` | Jalankan: `pkg install rust` dan coba lagi |
+| `ModuleNotFoundError: No module named 'web3'` | Jalankan: `pip install setuptools web3` |
+| Script lambat saat mulai | Import pertama web3 butuh beberapa detik di HP — ini normal |
+| Emoji tidak tampil dengan benar | Bot otomatis deteksi Termux dan pakai fallback teks `[OK]`, `[ERR]`, dll. |
+| Termux mati di background | Gunakan `termux-wake-lock` atau jalankan di dalam sesi `tmux` |
+| Permission denied | Jalankan: `chmod +x onchain_bot.py` |
+| Butuh akses storage | Jalankan: `termux-setup-storage` untuk akses storage eksternal |
 
 </details>
 
 <details>
-<summary><b>📏 Minimum Termux requirements</b></summary>
+<summary><b>📏 Kebutuhan minimum Termux</b></summary>
 
-- **Termux** v0.118+ (from [F-Droid](https://f-droid.org/en/packages/com.termux/) — Google Play version is outdated)
+- **Termux** v0.118+ (dari [F-Droid](https://f-droid.org/en/packages/com.termux/) — versi Google Play sudah usang)
 - **Android** 7.0+
-- **Storage** ~500MB (Python + web3 dependencies)
-- **RAM** 2GB+ recommended
+- **Storage** ~500MB (Python + dependensi web3)
+- **RAM** 2GB+ disarankan
 
 </details>
 
-## 📁 File Structure
+## 📁 Struktur File
 
 ```
 onchain-bot/
-├── onchain_bot.py          # Main bot script
-├── setup_termux.sh         # One-click Termux setup
-├── requirements.txt        # Python dependencies
-├── config.example.json     # Example configuration
-├── README.md               # This file
-├── LICENSE                  # MIT License
-└── .gitignore              # Git ignore rules
+├── onchain_bot.py          # Script utama bot
+├── setup_termux.sh         # Setup Termux satu klik
+├── requirements.txt        # Dependensi Python
+├── config.example.json     # Contoh konfigurasi
+├── README.md               # File ini
+├── LICENSE                  # Lisensi MIT
+└── .gitignore              # Aturan git ignore
 ```
 
-## ⚠️ Security
+## ⚠️ Keamanan
 
-> **IMPORTANT:** This tool stores private keys in a local JSON file (`onchain_config.json`).
+> **PENTING:** Tool ini menyimpan private key dalam file JSON lokal (`onchain_config.json`).
 
-- 🔒 **Never** share your `onchain_config.json` file
-- 🔒 **Never** run this on untrusted or shared machines
-- 🔒 **Never** commit config files with real private keys
-- ✅ Use a **dedicated hot wallet** with small amounts
-- ✅ **Test on testnets first** before using mainnet
-- ✅ Keep your `onchain_config.json` in `.gitignore`
+- 🔒 **Jangan pernah** bagikan file `onchain_config.json` kamu
+- 🔒 **Jangan pernah** jalankan ini di mesin yang tidak terpercaya atau bersama
+- 🔒 **Jangan pernah** commit file config dengan private key asli
+- ✅ Gunakan **hot wallet khusus** dengan jumlah kecil
+- ✅ **Test di testnet dulu** sebelum menggunakan mainnet
+- ✅ Pastikan `onchain_config.json` ada di `.gitignore`
 
-## 🤝 Contributing
+## 🤝 Kontribusi
 
-Contributions are welcome! Feel free to:
+Kontribusi sangat diterima! Silakan:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Fork repository
+2. Buat branch fitur (`git checkout -b fitur/fitur-keren`)
+3. Commit perubahan (`git commit -m 'Tambah fitur keren'`)
+4. Push ke branch (`git push origin fitur/fitur-keren`)
+5. Buka Pull Request
 
-## 📄 License
+## 📄 Lisensi
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+Proyek ini dilisensikan di bawah Lisensi MIT — lihat file [LICENSE](LICENSE) untuk detailnya.
 
-## ⭐ Star This Repo
+## ⭐ Beri Bintang Repo Ini
 
-If you find this tool useful, give it a ⭐ on GitHub!
+Jika kamu merasa tool ini berguna, beri ⭐ di GitHub!
 
 ---
 
 <p align="center">
-  Built with ❤️ by <a href="https://github.com/Limit99">Limit99</a>
+  Dibuat dengan ❤️ oleh <a href="https://github.com/Limit99">Limit99</a>
 </p>
