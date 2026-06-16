@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              ONCHAIN AUTOMATION BOT v1.6.0                    ║
+║              ONCHAIN AUTOMATION BOT v1.7.0                    ║
 ║  Kirim · Swap · Bridge · Multi-wallet · Tugas Terjadwal       ║
 ╚═══════════════════════════════════════════════════════════════╝
 
@@ -62,7 +62,7 @@ except Exception as e:
 # KONSTANTA
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 
 # ── Database Chain ID ───────────────────────────────────────────
 # Maps chain_id → (name, symbol, explorer, network_type, rpc_url)
@@ -468,12 +468,20 @@ class Config:
 
     # ── Kontrak Bridge ──────────────────────────────────────────
 
-    def add_bridge(self, name, chain_from, chain_to, contract_address):
-        self.data["bridge_contracts"][name] = {
+    def add_bridge(self, name, chain_from, chain_to, contract_address=""):
+        entry = {
             "from_chain": chain_from,
             "to_chain": chain_to,
-            "contract": Web3.to_checksum_address(contract_address),
         }
+        if contract_address and contract_address.strip():
+            entry["contract"] = Web3.to_checksum_address(contract_address.strip())
+        else:
+            entry["contract"] = ""
+        # Simpan chain_id tujuan otomatis dari chain yang dikenali
+        chains = self.data.get("chains", {})
+        if chain_to in chains:
+            entry["dest_chain_id"] = chains[chain_to]["chain_id"]
+        self.data["bridge_contracts"][name] = entry
         self.save()
 
     def get_bridges(self):
@@ -1034,6 +1042,43 @@ class CLI:
 
     # ── Pemilih Umum ────────────────────────────────────────────
 
+    def _pick_chain_name(self, label="Pilih Chain", filter_type=None):
+        """Tampilkan daftar chain bernomor dan kembalikan nama chain yang dipilih (tanpa koneksi)."""
+        chains = self.config.get_chains()
+        if filter_type:
+            chains = {n: c for n, c in chains.items() if c.get("type") == filter_type}
+        if not chains:
+            log_warn("Tidak ada chain tersedia.")
+            return None
+
+        # Urutkan: mainnet dulu, lalu testnet, lalu alphabetical
+        sorted_chains = sorted(chains.items(), key=lambda x: (0 if x[1].get("type") == "mainnet" else 1, x[0].lower()))
+
+        keyword = prompt(f"{label} — ketik kata kunci untuk filter (atau Enter untuk lihat semua)", "")
+        if keyword:
+            sorted_chains = [(n, c) for n, c in sorted_chains
+                             if keyword.lower() in n.lower() or keyword.lower() in c["symbol"].lower()]
+            if not sorted_chains:
+                log_err(f"Tidak ditemukan chain dengan kata kunci '{keyword}'")
+                return None
+
+        print(f"\n  {C.BOLD}{label}:{C.END}")
+        for i, (name, c) in enumerate(sorted_chains, 1):
+            tag = f"{C.G}mainnet{C.END}" if c.get("type") == "mainnet" else f"{C.Y}testnet{C.END}"
+            print(f"    {C.BOLD}{i:3}.{C.END} {C.CY}{name}{C.END} ({c['symbol']}) — {tag}")
+        print()
+
+        try:
+            idx = int(prompt("Ketik nomor")) - 1
+            if 0 <= idx < len(sorted_chains):
+                return sorted_chains[idx][0]
+            else:
+                log_err("Nomor tidak valid")
+                return None
+        except ValueError:
+            log_err("Masukkan angka yang valid")
+            return None
+
     def _select_chain(self):
         chains = self.config.get_chains()
         if not chains:
@@ -1247,12 +1292,18 @@ class CLI:
                 log_ok(f"Token '{sym}' ditambahkan di {chain}!")
 
             elif choice == "5":
-                name   = prompt("Nama bridge (misal: stargate, hop)")
-                cfrom  = prompt("Chain asal")
-                cto    = prompt("Chain tujuan")
-                addr   = prompt("Alamat kontrak bridge")
+                name   = prompt("Nama bridge (misal: stargate, hop, custom)")
+                log_info("Pilih chain asal:")
+                cfrom  = self._pick_chain_name("Chain Asal")
+                if not cfrom:
+                    continue
+                log_info("Pilih chain tujuan:")
+                cto    = self._pick_chain_name("Chain Tujuan")
+                if not cto:
+                    continue
+                addr   = prompt("Alamat kontrak bridge (kosongkan jika belum tahu)", "")
                 self.config.add_bridge(name, cfrom, cto, addr)
-                log_ok(f"Bridge '{name}' berhasil ditambahkan!")
+                log_ok(f"Bridge '{name}' berhasil ditambahkan! ({cfrom} → {cto})")
 
             elif choice == "6":
                 self._print_full_config()
@@ -1289,7 +1340,8 @@ class CLI:
         if bridges:
             print(f"\n  {C.BOLD}Bridge:{C.END}")
             for nm, info in bridges.items():
-                print(f"    • {C.CY}{nm}{C.END} — {info['from_chain']} → {info['to_chain']}")
+                contract_str = short_addr(info['contract']) if info.get('contract') else "(belum ada kontrak)"
+                print(f"    • {C.CY}{nm}{C.END} — {info['from_chain']} → {info['to_chain']} — {contract_str}")
         print(f"  {'═' * 55}")
 
     # ── Kirim ───────────────────────────────────────────────────
@@ -1443,14 +1495,55 @@ class CLI:
     def _menu_bridge(self):
         bridges = self.config.get_bridges()
         if not bridges:
-            log_warn("Belum ada bridge. Tambahkan di Pengaturan."); return
+            log_warn("Belum ada bridge. Mau setup bridge sekarang?")
+            if confirm("Setup bridge baru?"):
+                name = prompt("Nama bridge (misal: stargate, hop, custom)")
+                log_info("Pilih chain asal:")
+                cfrom = self._pick_chain_name("Chain Asal")
+                if not cfrom: return
+                log_info("Pilih chain tujuan:")
+                cto = self._pick_chain_name("Chain Tujuan")
+                if not cto: return
+                addr = prompt("Alamat kontrak bridge (kosongkan jika belum tahu)", "")
+                self.config.add_bridge(name, cfrom, cto, addr)
+                log_ok(f"Bridge '{name}' berhasil ditambahkan! ({cfrom} → {cto})")
+                bridges = self.config.get_bridges()
+            else:
+                return
 
         b_list = list(bridges.items())
-        print(f"\n  {C.BOLD}Bridge:{C.END}")
+        print(f"\n  {C.BOLD}Daftar Bridge:{C.END}")
+        chains = self.config.get_chains()
         for i, (n, info) in enumerate(b_list, 1):
-            print(f"    {i}. {C.CY}{n}{C.END} — {info['from_chain']} → {info['to_chain']}")
-        bi = int(prompt("Pilih bridge")) - 1
+            src = info['from_chain']
+            dst = info['to_chain']
+            src_sym = chains.get(src, {}).get("symbol", "?")
+            dst_sym = chains.get(dst, {}).get("symbol", "?")
+            status = f"{C.G}✓ kontrak{C.END}" if info.get("contract") else f"{C.Y}tanpa kontrak{C.END}"
+            print(f"    {i}. {C.CY}{n}{C.END} — {src} ({src_sym}) → {dst} ({dst_sym}) [{status}]")
+        print()
+
+        try:
+            bi = int(prompt("Pilih bridge (nomor)")) - 1
+            if bi < 0 or bi >= len(b_list):
+                log_err("Nomor tidak valid"); return
+        except ValueError:
+            log_err("Masukkan angka"); return
+
         bname, binfo = b_list[bi]
+
+        # Cek apakah kontrak bridge ada
+        contract = binfo.get("contract", "")
+        if not contract:
+            log_warn(f"Bridge '{bname}' belum punya alamat kontrak!")
+            contract = prompt("Masukkan alamat kontrak bridge untuk melanjutkan", "")
+            if not contract:
+                log_err("Tidak bisa bridge tanpa alamat kontrak."); return
+            # Simpan kontrak untuk nanti
+            binfo["contract"] = Web3.to_checksum_address(contract.strip())
+            self.config.data["bridge_contracts"][bname] = binfo
+            self.config.save()
+            log_ok("Alamat kontrak disimpan!")
 
         if not self.engine.connect(binfo["from_chain"]):
             return
@@ -1459,13 +1552,19 @@ class CLI:
         amount = self._select_amount()
         if not amount: return
 
-        dest = self.config.get_chains().get(binfo["to_chain"], {})
-        dest_id = dest.get("chain_id") or prompt("Chain ID tujuan")
+        # Ambil chain ID tujuan otomatis
+        dest = chains.get(binfo["to_chain"], {})
+        dest_id = binfo.get("dest_chain_id") or dest.get("chain_id")
+        if not dest_id:
+            dest_id = prompt("Chain ID tujuan (tidak terdeteksi otomatis)")
 
+        src_sym = chains.get(binfo["from_chain"], {}).get("symbol", "?")
         print(f"\n  {C.BOLD}Pratinjau Bridge:{C.END}")
-        print(f"    Bridge : {C.CY}{bname}{C.END}")
-        print(f"    Rute   : {binfo['from_chain']} → {binfo['to_chain']}")
-        print(f"    Jumlah : {C.G}{amount}{C.END}")
+        print(f"    Bridge      : {C.CY}{bname}{C.END}")
+        print(f"    Rute        : {binfo['from_chain']} → {binfo['to_chain']}")
+        print(f"    Chain ID    : {dest_id}")
+        print(f"    Jumlah      : {C.G}{amount} {src_sym}{C.END}")
+        print(f"    Kontrak     : {binfo['contract']}")
         log_warn("ABI Bridge bervariasi! Pastikan kontrak sesuai dengan interface generik.")
 
         if confirm("Jalankan bridge?"):
