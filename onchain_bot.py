@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              ONCHAIN AUTOMATION BOT v1.7.0                    ║
+║              ONCHAIN AUTOMATION BOT v1.7.1                    ║
 ║  Kirim · Swap · Bridge · Multi-wallet · Tugas Terjadwal       ║
 ╚═══════════════════════════════════════════════════════════════╝
 
@@ -62,7 +62,7 @@ except Exception as e:
 # KONSTANTA
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 
 # ── Database Chain ID ───────────────────────────────────────────
 # Maps chain_id → (name, symbol, explorer, network_type, rpc_url)
@@ -486,6 +486,28 @@ class Config:
 
     def get_bridges(self):
         return self.data.get("bridge_contracts", {})
+
+    def remove_bridge(self, name):
+        self.data["bridge_contracts"].pop(name, None)
+        self.save()
+
+    # ── Hapus DEX Router ────────────────────────────────────────
+
+    def remove_dex_router(self, chain_name, router_name):
+        if chain_name in self.data.get("dex_routers", {}):
+            self.data["dex_routers"][chain_name].pop(router_name, None)
+            if not self.data["dex_routers"][chain_name]:
+                del self.data["dex_routers"][chain_name]
+            self.save()
+
+    # ── Hapus Token ─────────────────────────────────────────────
+
+    def remove_token(self, chain_name, symbol):
+        if chain_name in self.data.get("tokens", {}):
+            self.data["tokens"][chain_name].pop(symbol, None)
+            if not self.data["tokens"][chain_name]:
+                del self.data["tokens"][chain_name]
+            self.save()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1194,8 +1216,7 @@ class CLI:
                 ("4", "Tambah Token"),
                 ("5", "Tambah Kontrak Bridge"),
                 ("6", "Lihat Semua Konfigurasi"),
-                ("7", "Hapus Chain"),
-                ("8", "Hapus Wallet"),
+                ("7", "🗑 Hapus Konfigurasi"),
                 ("0", "← Kembali"),
             ])
             if choice == "0":
@@ -1309,16 +1330,7 @@ class CLI:
                 self._print_full_config()
 
             elif choice == "7":
-                self._print_chains()
-                n = prompt("Nama chain yang dihapus")
-                self.config.remove_chain(n)
-                log_ok(f"'{n}' berhasil dihapus!")
-
-            elif choice == "8":
-                self._print_wallets()
-                idx = int(prompt("Wallet # yang dihapus")) - 1
-                self.config.remove_wallet(idx)
-                log_ok("Wallet berhasil dihapus!")
+                self._menu_delete()
 
     def _print_full_config(self):
         print(f"\n  {'═' * 55}")
@@ -1343,6 +1355,126 @@ class CLI:
                 contract_str = short_addr(info['contract']) if info.get('contract') else "(belum ada kontrak)"
                 print(f"    • {C.CY}{nm}{C.END} — {info['from_chain']} → {info['to_chain']} — {contract_str}")
         print(f"  {'═' * 55}")
+
+    # ── Hapus Konfigurasi ────────────────────────────────────────
+
+    def _menu_delete(self):
+        while True:
+            choice = menu_select("🗑 HAPUS KONFIGURASI", [
+                ("1", "Hapus Chain"),
+                ("2", "Hapus Wallet"),
+                ("3", "Hapus Bridge"),
+                ("4", "Hapus DEX Router"),
+                ("5", "Hapus Token"),
+                ("0", "← Kembali"),
+            ])
+            if choice == "0":
+                break
+
+            elif choice == "1":
+                chains = self.config.get_chains()
+                if not chains:
+                    log_warn("Tidak ada chain."); continue
+                self._print_chains()
+                n = prompt("Nama chain yang dihapus")
+                # Case-insensitive
+                for cn in chains:
+                    if cn.lower() == n.lower():
+                        n = cn; break
+                if n not in chains:
+                    log_err(f"Chain '{n}' tidak ditemukan"); continue
+                if confirm(f"Yakin hapus chain '{n}'?"):
+                    self.config.remove_chain(n)
+                    log_ok(f"Chain '{n}' berhasil dihapus!")
+
+            elif choice == "2":
+                wallets = self.config.get_wallets()
+                if not wallets:
+                    log_warn("Tidak ada wallet."); continue
+                self._print_wallets()
+                try:
+                    idx = int(prompt("Nomor wallet yang dihapus")) - 1
+                    if 0 <= idx < len(wallets):
+                        wname = wallets[idx]['name']
+                        if confirm(f"Yakin hapus wallet '{wname}'?"):
+                            self.config.remove_wallet(idx)
+                            log_ok(f"Wallet '{wname}' berhasil dihapus!")
+                    else:
+                        log_err("Nomor tidak valid")
+                except ValueError:
+                    log_err("Masukkan angka")
+
+            elif choice == "3":
+                bridges = self.config.get_bridges()
+                if not bridges:
+                    log_warn("Tidak ada bridge."); continue
+                b_list = list(bridges.items())
+                print(f"\n  {C.BOLD}Daftar Bridge:{C.END}")
+                for i, (nm, info) in enumerate(b_list, 1):
+                    contract_str = short_addr(info['contract']) if info.get('contract') else "(tanpa kontrak)"
+                    print(f"    {i}. {C.CY}{nm}{C.END} — {info['from_chain']} → {info['to_chain']} — {contract_str}")
+                print()
+                try:
+                    idx = int(prompt("Nomor bridge yang dihapus")) - 1
+                    if 0 <= idx < len(b_list):
+                        bname = b_list[idx][0]
+                        if confirm(f"Yakin hapus bridge '{bname}'?"):
+                            self.config.remove_bridge(bname)
+                            log_ok(f"Bridge '{bname}' berhasil dihapus!")
+                    else:
+                        log_err("Nomor tidak valid")
+                except ValueError:
+                    log_err("Masukkan angka")
+
+            elif choice == "4":
+                routers = self.config.data.get("dex_routers", {})
+                if not routers:
+                    log_warn("Tidak ada DEX router."); continue
+                r_list = []
+                print(f"\n  {C.BOLD}DEX Router:{C.END}")
+                num = 1
+                for ch, dexes in routers.items():
+                    for nm, info in dexes.items():
+                        r_list.append((ch, nm))
+                        print(f"    {num}. {C.CY}{ch}/{nm}{C.END} — {short_addr(info['address'])}")
+                        num += 1
+                print()
+                try:
+                    idx = int(prompt("Nomor DEX router yang dihapus")) - 1
+                    if 0 <= idx < len(r_list):
+                        ch, nm = r_list[idx]
+                        if confirm(f"Yakin hapus DEX router '{ch}/{nm}'?"):
+                            self.config.remove_dex_router(ch, nm)
+                            log_ok(f"DEX router '{ch}/{nm}' berhasil dihapus!")
+                    else:
+                        log_err("Nomor tidak valid")
+                except ValueError:
+                    log_err("Masukkan angka")
+
+            elif choice == "5":
+                tokens = self.config.data.get("tokens", {})
+                if not tokens:
+                    log_warn("Tidak ada token."); continue
+                t_list = []
+                print(f"\n  {C.BOLD}Token:{C.END}")
+                num = 1
+                for ch, toks in tokens.items():
+                    for sym, info in toks.items():
+                        t_list.append((ch, sym))
+                        print(f"    {num}. {C.CY}{ch}/{sym}{C.END} — {short_addr(info['address'])} ({info['decimals']}d)")
+                        num += 1
+                print()
+                try:
+                    idx = int(prompt("Nomor token yang dihapus")) - 1
+                    if 0 <= idx < len(t_list):
+                        ch, sym = t_list[idx]
+                        if confirm(f"Yakin hapus token '{ch}/{sym}'?"):
+                            self.config.remove_token(ch, sym)
+                            log_ok(f"Token '{ch}/{sym}' berhasil dihapus!")
+                    else:
+                        log_err("Nomor tidak valid")
+                except ValueError:
+                    log_err("Masukkan angka")
 
     # ── Kirim ───────────────────────────────────────────────────
 
