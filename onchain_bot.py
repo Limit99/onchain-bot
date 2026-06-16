@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              ONCHAIN AUTOMATION BOT v1.7.1                    ║
+║              ONCHAIN AUTOMATION BOT v1.8.0                    ║
 ║  Kirim · Swap · Bridge · Multi-wallet · Tugas Terjadwal       ║
 ╚═══════════════════════════════════════════════════════════════╝
 
@@ -62,7 +62,7 @@ except Exception as e:
 # KONSTANTA
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.7.1"
+VERSION = "1.8.0"
 
 # ── Database Chain ID ───────────────────────────────────────────
 # Maps chain_id → (name, symbol, explorer, network_type, rpc_url)
@@ -312,6 +312,131 @@ def menu_select(title, options):
         print(f"  {C.W}  [{C.CY}{key}{C.W}] {label}{C.END}")
     print(f"  {C.DIM}{'─' * 45}{C.END}")
     return input(f"  {C.Y}▸ Pilih: {C.END}").strip()
+
+
+# ═══════════════════════════════════════════════════════════════
+# DATABASE DEX ROUTER YANG DIKENALI
+# chain_name → list of (dex_name, router_address, weth_address)
+# ═══════════════════════════════════════════════════════════════
+KNOWN_DEX_ROUTERS = {
+    # ── Mainnets ────────────────────────────────────────────────
+    "Ethereum": [
+        ("uniswap-v2",   "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+        ("uniswap-v3",   "0xE592427A0AEce92De3Edee1F18E0157C05861564", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+        ("sushiswap",    "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+    ],
+    "BSC": [
+        ("pancakeswap",  "0x10ED43C718714eb63d5aA57B78B54704E256024E", "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"),
+        ("uniswap-v3",   "0xB971eF87ede563556b2ED4b1C0b0019111Dd85d2", "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"),
+    ],
+    "Polygon": [
+        ("quickswap",    "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"),
+        ("sushiswap",    "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"),
+        ("uniswap-v3",   "0xE592427A0AEce92De3Edee1F18E0157C05861564", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"),
+    ],
+    "Arbitrum One": [
+        ("uniswap-v3",   "0xE592427A0AEce92De3Edee1F18E0157C05861564", "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"),
+        ("sushiswap",    "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506", "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"),
+        ("camelot",      "0xc873fEcbd354f5A56E00E710B90EF4201db2448d", "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"),
+    ],
+    "Optimism": [
+        ("uniswap-v3",   "0xE592427A0AEce92De3Edee1F18E0157C05861564", "0x4200000000000000000000000000000000000006"),
+        ("velodrome",    "0xa062aE8A9c5e11aaA026fc2670B0D65cCc8B2858", "0x4200000000000000000000000000000000000006"),
+    ],
+    "Avalanche": [
+        ("trader-joe",   "0x60aE616a2155Ee3d9A68541Ba4544862310933d4", "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"),
+        ("pangolin",     "0xE54Ca86531e17Ef3616d22Ca28b0D458b6C89106", "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"),
+    ],
+    "Fantom": [
+        ("spookyswap",   "0xF491e7B69E4244ad4002BC14e878a34207E38c29", "0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83"),
+        ("spiritswap",   "0x16327E3FbDaCA3bcF7E38F5Af2599D2DDc33aE52", "0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83"),
+    ],
+    "Base": [
+        ("uniswap-v3",   "0x2626664c2603336E57B271c5C0b26F421741e481", "0x4200000000000000000000000000000000000006"),
+        ("aerodrome",    "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43", "0x4200000000000000000000000000000000000006"),
+        ("sushiswap",    "0x6BDED42c6DA8FBf0d2bA55B2fa120C5e0c8D7891", "0x4200000000000000000000000000000000000006"),
+    ],
+    "Linea": [
+        ("syncswap",     "0x80e38291e06339d10AAB483C65695D004dBD5C69", "0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f"),
+    ],
+    "Scroll": [
+        ("syncswap",     "0x80e38291e06339d10AAB483C65695D004dBD5C69", "0x5300000000000000000000000000000000000004"),
+    ],
+    "Sonic": [
+        ("spookyswap",   "0x12AA6ec7d603DC79Ea6A12a0F2C488E6C4eFC170", ""),
+    ],
+    "Mantle": [
+        ("agni-finance", "0x319B69888b0d11cEC22caA5034e25FfFBDc88421", "0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8"),
+    ],
+    # ── Testnets ────────────────────────────────────────────────
+    "Sepolia": [
+        ("uniswap-v2",   "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3", "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"),
+        ("uniswap-v3",   "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E", "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"),
+    ],
+    "Base Sepolia": [
+        ("uniswap-v2",   "0x1689E7B1F10000AE47eBfE339a4f69dECd19F602", "0x4200000000000000000000000000000000000006"),
+    ],
+    "Arbitrum Sepolia": [
+        ("uniswap-v3",   "0x101F443B4d1b059569D643917553c771E1b9663E", "0x980B62Da83eFf3D4576C647993b0c1V7aaf96816"),
+    ],
+    "BSC Testnet": [
+        ("pancakeswap",  "0xD99D1c33F9fC3444f8101754aBC46c52416550D1", "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd"),
+    ],
+    "Avalanche Fuji": [
+        ("trader-joe",   "0xd7f655E3376cE2D7A2b08fF01Eb3B1023191A901", "0xd00ae08403B9bbb9124bB305C09058E32C39A48c"),
+    ],
+    "Monad Testnet": [
+        ("zkswap-v2",    "0x3be49777B2Dc6cED93d4BFa0Ad8CA1a0C2114917", ""),
+    ],
+    "monad-testnet": [
+        ("zkswap-v2",    "0x3be49777B2Dc6cED93d4BFa0Ad8CA1a0C2114917", ""),
+    ],
+}
+
+# Database token populer per chain
+# chain_name → list of (symbol, address, decimals)
+KNOWN_TOKENS = {
+    "Ethereum": [
+        ("USDC",  "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6),
+        ("USDT",  "0xdAC17F958D2ee523a2206206994597C13D831ec7", 6),
+        ("DAI",   "0x6B175474E89094C44Da98b954EedeAC495271d0F", 18),
+        ("WETH",  "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18),
+        ("WBTC",  "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", 8),
+    ],
+    "BSC": [
+        ("USDT",  "0x55d398326f99059fF775485246999027B3197955", 18),
+        ("USDC",  "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18),
+        ("BUSD",  "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", 18),
+        ("WBNB",  "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", 18),
+    ],
+    "Polygon": [
+        ("USDC",  "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", 6),
+        ("USDT",  "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", 6),
+        ("WMATIC","0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", 18),
+    ],
+    "Arbitrum One": [
+        ("USDC",  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", 6),
+        ("USDT",  "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", 6),
+        ("WETH",  "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", 18),
+    ],
+    "Base": [
+        ("USDC",  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6),
+        ("WETH",  "0x4200000000000000000000000000000000000006", 18),
+    ],
+    "Optimism": [
+        ("USDC",  "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", 6),
+        ("USDT",  "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58", 6),
+        ("WETH",  "0x4200000000000000000000000000000000000006", 18),
+    ],
+    "Avalanche": [
+        ("USDC",  "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", 6),
+        ("USDT",  "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", 6),
+        ("WAVAX", "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7", 18),
+    ],
+    "Sepolia": [
+        ("WETH",  "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14", 18),
+    ],
+}
 
 
 def detect_chain(rpc_url):
@@ -1293,10 +1418,32 @@ class CLI:
             elif choice == "3":
                 if not self.config.get_chains():
                     log_warn("Tambah chain dulu!"); continue
-                self._print_chains()
-                chain = prompt("Nama chain")
+                log_info("Pilih chain untuk DEX Router:")
+                chain = self._pick_chain_name("Chain")
+                if not chain:
+                    continue
+                # Cek apakah ada DEX yang dikenali untuk chain ini
+                known = KNOWN_DEX_ROUTERS.get(chain, [])
+                if known:
+                    print(f"\n  {C.BOLD}DEX yang dikenali untuk {C.CY}{chain}{C.END}{C.BOLD}:{C.END}")
+                    for i, (dname, daddr, dweth) in enumerate(known, 1):
+                        print(f"    {C.BOLD}{i}.{C.END} {C.CY}{dname}{C.END} — {short_addr(daddr)}")
+                    print(f"    {C.BOLD}{len(known)+1}.{C.END} {C.Y}✏️  Masukkan manual{C.END}")
+                    print()
+                    try:
+                        pick = int(prompt("Pilih nomor")) - 1
+                        if 0 <= pick < len(known):
+                            dname, daddr, dweth = known[pick]
+                            self.config.add_dex_router(chain, dname, daddr, dweth)
+                            log_ok(f"DEX '{dname}' ditambahkan di {chain}! (otomatis)")
+                            continue
+                    except ValueError:
+                        pass
+                # Manual input
                 name  = prompt("Nama DEX (misal: uniswap-v2, pancakeswap)")
                 addr  = prompt("Alamat kontrak router")
+                if not addr:
+                    log_err("Alamat kontrak router wajib diisi!"); continue
                 weth  = prompt("Alamat WETH (opsional, kosongkan untuk auto)", "")
                 self.config.add_dex_router(chain, name, addr, weth)
                 log_ok(f"DEX '{name}' ditambahkan di {chain}!")
@@ -1304,10 +1451,32 @@ class CLI:
             elif choice == "4":
                 if not self.config.get_chains():
                     log_warn("Tambah chain dulu!"); continue
-                self._print_chains()
-                chain = prompt("Nama chain")
+                log_info("Pilih chain untuk Token:")
+                chain = self._pick_chain_name("Chain")
+                if not chain:
+                    continue
+                # Cek apakah ada token yang dikenali untuk chain ini
+                known_t = KNOWN_TOKENS.get(chain, [])
+                if known_t:
+                    print(f"\n  {C.BOLD}Token yang dikenali untuk {C.CY}{chain}{C.END}{C.BOLD}:{C.END}")
+                    for i, (tsym, taddr, tdec) in enumerate(known_t, 1):
+                        print(f"    {C.BOLD}{i}.{C.END} {C.CY}{tsym}{C.END} — {short_addr(taddr)} ({tdec}d)")
+                    print(f"    {C.BOLD}{len(known_t)+1}.{C.END} {C.Y}✏️  Masukkan manual{C.END}")
+                    print()
+                    try:
+                        pick = int(prompt("Pilih nomor")) - 1
+                        if 0 <= pick < len(known_t):
+                            tsym, taddr, tdec = known_t[pick]
+                            self.config.add_token(chain, tsym, taddr, tdec)
+                            log_ok(f"Token '{tsym}' ditambahkan di {chain}! (otomatis)")
+                            continue
+                    except ValueError:
+                        pass
+                # Manual input
                 sym   = prompt("Simbol token (misal: USDC)")
                 addr  = prompt("Alamat kontrak token")
+                if not addr:
+                    log_err("Alamat kontrak token wajib diisi!"); continue
                 dec   = prompt("Desimal", "18")
                 self.config.add_token(chain, sym, addr, dec)
                 log_ok(f"Token '{sym}' ditambahkan di {chain}!")
