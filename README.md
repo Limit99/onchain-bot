@@ -30,6 +30,7 @@
 | 🧪 **Siap Testnet** | Dukungan penuh untuk testnet (Sepolia, BSC Testnet, dll.) |
 | 📜 **Riwayat TX** | Semua transaksi tercatat lokal untuk pelacakan |
 | 🔍 **Auto-Deteksi Chain** | Cukup masukkan RPC, chain ID/nama/simbol terdeteksi otomatis |
+| 📦 **55 Chain Terpasang** | 37 mainnet + 18 testnet sudah ter-load otomatis dengan RPC default |
 
 ## 📋 Kebutuhan
 
@@ -60,34 +61,48 @@ python onchain_bot.py
 
 ### 4. Pengaturan pertama kali
 
-Saat menjalankan bot untuk pertama kali, kamu perlu mengatur:
+Saat pertama kali jalan, *55 chain EVM sudah ter-load otomatis* (lengkap dengan RPC default). Kamu cukup:
 
-1. **Tambah Chain** — Masukkan URL RPC (chain ID, nama, simbol terdeteksi otomatis!)
-2. **Tambah Wallet** — Masukkan alamat wallet dan private key
+1. **Tambah Wallet** — Masukkan alamat wallet dan private key
+2. **Pilih Chain** — Pilih dari 37 mainnet atau 18 testnet yang sudah tersedia
 3. **Mulai bertransaksi!**
+
+> 💡 Tidak perlu setup chain manual! Semua chain populer sudah siap pakai.
 
 ## 📖 Panduan Penggunaan
 
 ### ⚙️ Pengaturan & Konfigurasi
 
-Sebelum menggunakan fitur apapun, kamu perlu menambahkan minimal satu chain dan satu wallet.
+Sebelum menggunakan fitur apapun, kamu perlu menambahkan minimal satu wallet. *Chain tidak perlu di-setup* — 55 chain sudah otomatis tersedia!
 
-#### Menambahkan Chain
+#### Chain yang Sudah Ter-load (55 chain)
 
-Cukup masukkan URL RPC, bot akan otomatis mendeteksi semua detail chain:
+**🌐 Mainnet (37):** Ethereum, BSC, Polygon, Arbitrum One, Optimism, Avalanche, Fantom, Base, zkSync Era, Polygon zkEVM, Linea, Scroll, Mantle, Manta Pacific, Zora, Blast, opBNB, Moonbeam, Moonriver, Celo, Gnosis, Cronos, Metis, Mode, Taiko, Cyber, World Chain, Abstract, Ink, Unichain, Sonic, Soneium, Berachain, X Layer, Lisk, Fraxtal, Xai, Kroma
+
+**🧪 Testnet (18):** Sepolia, Holesky, BSC Testnet, Polygon Amoy, Arbitrum Sepolia, Optimism Sepolia, Avalanche Fuji, Base Sepolia, Scroll Sepolia, Linea Sepolia, zkSync Sepolia, Blast Sepolia, Berachain Bartio, Unichain Sepolia, Gnosis Chiado, Mantle Sepolia, Monad Testnet
+
+> Semua chain di atas sudah punya RPC publik default. Tinggal pilih dan pakai!
+
+#### Menambahkan Chain Kustom
+
+Kalau chain yang kamu butuhkan belum ada, kamu bisa tambah manual:
 
 ```
 Pilih: 1 (Tambah Chain)
-  ▸ URL RPC: https://rpc.sepolia.org
-  [OK] Terdeteksi: Sepolia (Chain ID: 11155111, ETH, testnet)
-  ▸ Nama chain [Sepolia]:           ← tekan Enter untuk auto
-  ▸ Chain ID [11155111]:             ← tekan Enter untuk auto
-  ▸ Simbol native [ETH]:            ← tekan Enter untuk auto
-  ▸ URL Explorer [https://...]:     ← tekan Enter untuk auto
-  ▸ Tipe [testnet]:                 ← tekan Enter untuk auto
+  ▸ Pilih: 1 (Masukkan RPC - auto-deteksi)
+  ▸ URL RPC: https://rpc-custom-chain.example.com
+  [OK] Terdeteksi: CustomChain (Chain ID: 99999, CUSTOM, mainnet)
 ```
 
-> 50+ chain yang dikenali otomatis: Ethereum, BSC, Polygon, Arbitrum, Optimism, Base, Avalanche, Fantom, zkSync, Linea, Scroll, Blast, Mantle, Berachain, Sonic, Monad, dan semua testnetnya.
+Atau ganti RPC chain yang sudah ada:
+
+```
+Pilih: 1 (Tambah Chain)
+  ▸ Pilih: 3 (Ganti RPC chain yang sudah ada)
+  ▸ Nama chain: Ethereum
+  [i] RPC saat ini: https://eth.llamarpc.com
+  ▸ RPC baru: https://rpc-custom-kamu.example.com
+```
 
 #### Menambahkan Wallet
 
@@ -189,34 +204,7 @@ Lihat saldo token native dan ERC-20 untuk semua wallet yang dikonfigurasi di cha
 
 Lihat 20 transaksi terakhir dengan status, chain, tipe, alamat, dan hash TX.
 
-## 🔧 Konfigurasi Chain Populer
-
-Berikut beberapa konfigurasi chain yang sering digunakan:
-
-### Mainnet
-
-| Chain | URL RPC | Chain ID | Simbol |
-|---|---|---|---|
-| Ethereum | `https://eth.llamarpc.com` | 1 | ETH |
-| BSC | `https://bsc-dataseed.binance.org` | 56 | BNB |
-| Polygon | `https://polygon-rpc.com` | 137 | MATIC |
-| Arbitrum | `https://arb1.arbitrum.io/rpc` | 42161 | ETH |
-| Optimism | `https://mainnet.optimism.io` | 10 | ETH |
-| Avalanche | `https://api.avax.network/ext/bc/C/rpc` | 43114 | AVAX |
-| Base | `https://mainnet.base.org` | 8453 | ETH |
-| Fantom | `https://rpc.ftm.tools` | 250 | FTM |
-
-### Testnet
-
-| Chain | URL RPC | Chain ID | Simbol |
-|---|---|---|---|
-| Sepolia | `https://rpc.sepolia.org` | 11155111 | ETH |
-| BSC Testnet | `https://data-seed-prebsc-1-s1.binance.org:8545` | 97 | tBNB |
-| Polygon Amoy | `https://rpc-amoy.polygon.technology` | 80002 | MATIC |
-| Arbitrum Sepolia | `https://sepolia-rollup.arbitrum.io/rpc` | 421614 | ETH |
-| Base Sepolia | `https://sepolia.base.org` | 84532 | ETH |
-
-### DEX Router Populer
+## 🔧 DEX Router Populer
 
 | DEX | Chain | Alamat Router |
 |---|---|---|
