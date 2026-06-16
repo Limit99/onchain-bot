@@ -386,10 +386,12 @@ KNOWN_DEX_ROUTERS = {
         ("trader-joe",   "0xd7f655E3376cE2D7A2b08fF01Eb3B1023191A901", "0xd00ae08403B9bbb9124bB305C09058E32C39A48c"),
     ],
     "Monad Testnet": [
-        ("zkswap-v2",    "0x3be49777B2Dc6cED93d4BFa0Ad8CA1a0C2114917", ""),
+        ("zkswap-v2",    "0x3be49777B2Dc6cED93d4BFa0Ad8CA1a0C2114917", "0x760AfE86E5De5fa0Ee542fc7B7B713e1c5425701"),
+        ("bean-swap",    "0xCa810D095e90Daae6e867c19DF3A57F440BDB0D7", "0x760AfE86E5De5fa0Ee542fc7B7B713e1c5425701"),
     ],
     "monad-testnet": [
-        ("zkswap-v2",    "0x3be49777B2Dc6cED93d4BFa0Ad8CA1a0C2114917", ""),
+        ("zkswap-v2",    "0x3be49777B2Dc6cED93d4BFa0Ad8CA1a0C2114917", "0x760AfE86E5De5fa0Ee542fc7B7B713e1c5425701"),
+        ("bean-swap",    "0xCa810D095e90Daae6e867c19DF3A57F440BDB0D7", "0x760AfE86E5De5fa0Ee542fc7B7B713e1c5425701"),
     ],
 }
 
@@ -435,6 +437,12 @@ KNOWN_TOKENS = {
     ],
     "Sepolia": [
         ("WETH",  "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14", 18),
+    ],
+    "Monad Testnet": [
+        ("WMON",  "0x760AfE86E5De5fa0Ee542fc7B7B713e1c5425701", 18),
+        ("USDC",  "0xf817257fed379853cDe0fa4F97AB987181B1E5Ea", 6),
+        ("USDT",  "0x88b8E2161DEDC77EF4ab7585569D2415a1C1055D", 6),
+        ("WETH",  "0xB5a30b0FDc5F801bD3e3Cb7AEe24cE9D30b960C4", 18),
     ],
 }
 
@@ -890,6 +898,111 @@ class BlockchainEngine:
             address=Web3.to_checksum_address(router_address), abi=ROUTER_V2_ABI
         )
 
+    def _get_wrapped_native(self, router, router_address=""):
+        """
+        Deteksi alamat Wrapped Native Token (WETH/WMON/WBNB/dll).
+
+        Strategi:
+        1. Ambil dari config (jika user sudah simpan weth saat setup DEX)
+        2. Coba panggil router.WETH()
+        3. Gagal → informasi error yang jelas
+        """
+        # 1) Cek config dulu
+        if router_address:
+            chains = self.config.get_chains() if self.config else {}
+            for cname, cinfo in chains.items():
+                routers = self.config.data.get("dex_routers", {}).get(cname, {})
+                for rname, rinfo in routers.items():
+                    if rinfo.get("address", "").lower() == router_address.lower() and rinfo.get("weth"):
+                        log_info(f"Wrapped native dari config: {short_addr(rinfo['weth'])}")
+                        return Web3.to_checksum_address(rinfo["weth"])
+
+        # 2) Coba WETH() dari router contract
+        try:
+            weth = router.functions.WETH().call()
+            if weth and weth != "0x" + "0" * 40:
+                return weth
+        except Exception:
+            pass
+
+        raise ValueError(
+            "Tidak bisa mendeteksi alamat Wrapped Native Token!\n"
+            "  Router ini mungkin tidak punya fungsi WETH().\n"
+            "  Solusi: Masuk ke Pengaturan → Tambah DEX Router → isi alamat WETH/WMON manual,\n"
+            "  atau hapus router ini dan tambahkan ulang dengan alamat WETH/WMON yang benar."
+        )
+
+    def wrap_native(self, wallet, amount_ether):
+        """Wrap native token → wrapped token (deposit ke kontrak WETH/WMON)."""
+        info = self._chain_info()
+        amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
+        addr = Web3.to_checksum_address(wallet["address"])
+
+        # Cari WETH/WMON dari DEX router pertama yang punya
+        chains = self.config.get_chains() if self.config else {}
+        cn = self.current_chain
+        routers = self.config.data.get("dex_routers", {}).get(cn, {})
+        weth_addr = None
+        for rname, rinfo in routers.items():
+            if rinfo.get("weth"):
+                weth_addr = rinfo["weth"]
+                break
+            # Coba dari router contract
+            try:
+                router = self._get_router(rinfo["address"])
+                weth_addr = router.functions.WETH().call()
+                break
+            except Exception:
+                continue
+
+        if not weth_addr:
+            raise ValueError(
+                "Tidak ditemukan alamat Wrapped Native Token di chain ini.\n"
+                "  Tambahkan DEX router dengan alamat WETH/WMON terlebih dahulu."
+            )
+
+        WETH_ABI = json.loads('[{"constant":false,"inputs":[],"name":"deposit","outputs":[],"payable":true,"stateMutability":"payable","type":"function"},{"constant":false,"inputs":[{"name":"wad","type":"uint256"}],"name":"withdraw","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]')
+        weth = self.w3.eth.contract(address=Web3.to_checksum_address(weth_addr), abi=WETH_ABI)
+
+        log_info(f"Wrapping {amount_ether} {info['symbol']} → Wrapped {info['symbol']}")
+        tx = weth.functions.deposit().build_transaction({
+            "from": addr,
+            "value": amount_wei,
+        })
+        tx["_type"] = "wrap"
+        return self._build_and_send(tx, wallet["private_key"], wallet["address"])
+
+    def unwrap_native(self, wallet, amount_ether):
+        """Unwrap wrapped token → native token (withdraw dari kontrak WETH/WMON)."""
+        info = self._chain_info()
+        amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
+        addr = Web3.to_checksum_address(wallet["address"])
+
+        cn = self.current_chain
+        routers = self.config.data.get("dex_routers", {}).get(cn, {})
+        weth_addr = None
+        for rname, rinfo in routers.items():
+            if rinfo.get("weth"):
+                weth_addr = rinfo["weth"]
+                break
+            try:
+                router = self._get_router(rinfo["address"])
+                weth_addr = router.functions.WETH().call()
+                break
+            except Exception:
+                continue
+
+        if not weth_addr:
+            raise ValueError("Tidak ditemukan alamat Wrapped Native Token di chain ini.")
+
+        WETH_ABI = json.loads('[{"constant":false,"inputs":[],"name":"deposit","outputs":[],"payable":true,"stateMutability":"payable","type":"function"},{"constant":false,"inputs":[{"name":"wad","type":"uint256"}],"name":"withdraw","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]')
+        weth = self.w3.eth.contract(address=Web3.to_checksum_address(weth_addr), abi=WETH_ABI)
+
+        log_info(f"Unwrapping {amount_ether} Wrapped {info['symbol']} → {info['symbol']}")
+        tx = weth.functions.withdraw(amount_wei).build_transaction({"from": addr})
+        tx["_type"] = "unwrap"
+        return self._build_and_send(tx, wallet["private_key"], wallet["address"])
+
     def _approve_if_needed(self, token_address, spender, wallet, amount_raw):
         """Cek allowance ERC-20 dan approve jika kurang."""
         token = self.w3.eth.contract(address=Web3.to_checksum_address(token_address), abi=ERC20_ABI)
@@ -910,11 +1023,27 @@ class BlockchainEngine:
         """Swap native → ERC-20 via router kompatibel Uniswap V2."""
         info = self._chain_info()
         router = self._get_router(router_address)
-        weth = router.functions.WETH().call()
+        weth = self._get_wrapped_native(router, router_address)
+
+        # Deteksi jika token tujuan = WETH/WMON (wrap, bukan swap)
+        if Web3.to_checksum_address(token_address) == Web3.to_checksum_address(weth):
+            log_warn("Token tujuan = Wrapped Native Token (WETH/WMON)!")
+            log_info("Menggunakan wrap (deposit) langsung — lebih hemat gas")
+            return self.wrap_native(wallet, amount_ether)
+
         amount_in = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
         path = [weth, Web3.to_checksum_address(token_address)]
 
-        amounts = router.functions.getAmountsOut(amount_in, path).call()
+        try:
+            amounts = router.functions.getAmountsOut(amount_in, path).call()
+        except Exception as e:
+            raise ValueError(
+                f"getAmountsOut gagal — kemungkinan tidak ada pair liquidity\n"
+                f"  untuk {info['symbol']} ↔ token ini di DEX yang dipilih.\n"
+                f"  Pastikan pair sudah ada di DEX tersebut.\n"
+                f"  Detail: {e}"
+            )
+
         min_out = int(amounts[-1] * (100 - slippage) / 100)
         deadline = int(time.time()) + 300
 
@@ -934,17 +1063,31 @@ class BlockchainEngine:
         """Swap ERC-20 → native via router kompatibel Uniswap V2."""
         info = self._chain_info()
         router = self._get_router(router_address)
+        weth = self._get_wrapped_native(router, router_address)
         token = self.w3.eth.contract(address=Web3.to_checksum_address(token_address), abi=ERC20_ABI)
+
+        # Deteksi unwrap
+        if Web3.to_checksum_address(token_address) == Web3.to_checksum_address(weth):
+            log_warn("Token sumber = Wrapped Native Token (WETH/WMON)!")
+            log_info("Menggunakan unwrap (withdraw) langsung — lebih hemat gas")
+            return self.unwrap_native(wallet, amount)
 
         decimals = token.functions.decimals().call()
         symbol = token.functions.symbol().call()
         amount_raw = int(Decimal(str(amount)) * Decimal(10 ** decimals))
-        weth = router.functions.WETH().call()
         path = [Web3.to_checksum_address(token_address), weth]
 
         self._approve_if_needed(token_address, router_address, wallet, amount_raw)
 
-        amounts = router.functions.getAmountsOut(amount_raw, path).call()
+        try:
+            amounts = router.functions.getAmountsOut(amount_raw, path).call()
+        except Exception as e:
+            raise ValueError(
+                f"getAmountsOut gagal — kemungkinan tidak ada pair liquidity\n"
+                f"  untuk {symbol} ↔ {info['symbol']} di DEX yang dipilih.\n"
+                f"  Detail: {e}"
+            )
+
         min_out = int(amounts[-1] * (100 - slippage) / 100)
         deadline = int(time.time()) + 300
 
@@ -960,17 +1103,25 @@ class BlockchainEngine:
     def swap_token_to_token(self, wallet, router_address, token_in, token_out, amount, slippage=5):
         """Swap ERC-20 → ERC-20 via router kompatibel Uniswap V2."""
         router = self._get_router(router_address)
+        weth = self._get_wrapped_native(router, router_address)
         tok_in = self.w3.eth.contract(address=Web3.to_checksum_address(token_in), abi=ERC20_ABI)
 
         decimals = tok_in.functions.decimals().call()
         symbol = tok_in.functions.symbol().call()
         amount_raw = int(Decimal(str(amount)) * Decimal(10 ** decimals))
-        weth = router.functions.WETH().call()
         path = [Web3.to_checksum_address(token_in), weth, Web3.to_checksum_address(token_out)]
 
         self._approve_if_needed(token_in, router_address, wallet, amount_raw)
 
-        amounts = router.functions.getAmountsOut(amount_raw, path).call()
+        try:
+            amounts = router.functions.getAmountsOut(amount_raw, path).call()
+        except Exception as e:
+            raise ValueError(
+                f"getAmountsOut gagal — kemungkinan tidak ada pair liquidity\n"
+                f"  di DEX yang dipilih. Coba DEX lain.\n"
+                f"  Detail: {e}"
+            )
+
         min_out = int(amounts[-1] * (100 - slippage) / 100)
         deadline = int(time.time()) + 300
 
@@ -1872,9 +2023,25 @@ class CLI:
             ("1", "Native → Token"),
             ("2", "Token → Native"),
             ("3", "Token → Token"),
+            ("4", "🔄 Wrap (Native → Wrapped)"),
+            ("5", "🔄 Unwrap (Wrapped → Native)"),
             ("0", "← Kembali"),
         ])
         if stype == "0": return
+
+        if stype in ("4", "5"):
+            amount = self._select_amount()
+            if not amount: return
+            try:
+                if stype == "4":
+                    if confirm(f"Wrap {amount} native?"):
+                        self.engine.wrap_native(wallet, amount)
+                else:
+                    if confirm(f"Unwrap {amount} wrapped native?"):
+                        self.engine.unwrap_native(wallet, amount)
+            except Exception as e:
+                log_err(str(e))
+            return
 
         slippage = float(prompt("Slippage %", "5"))
         tokens = self.config.get_tokens(chain)
