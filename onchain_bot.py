@@ -62,7 +62,7 @@ except Exception as e:
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 # ── Known Chain ID Database ─────────────────────────────────────
 # Maps chain_id → (name, symbol, explorer, network_type)
@@ -788,12 +788,21 @@ class BlockchainEngine:
 # ═══════════════════════════════════════════════════════════════
 
 class Scheduler:
-    """Background task scheduler for recurring transactions."""
+    """Background task scheduler for recurring transactions.
+    
+    When running, output is buffered so it doesn't interrupt the
+    interactive menu. Users can view the log via 'View Scheduler Log'.
+    """
 
     def __init__(self):
         self.tasks: list[dict] = []
         self._running = False
         self._thread: threading.Thread | None = None
+        self._log: list[str] = []        # buffered log lines
+        self._log_lock = threading.Lock()
+        self._total_runs = 0
+        self._total_ok = 0
+        self._total_err = 0
 
     def add(self, name, func, interval_sec, *args, **kwargs):
         self.tasks.append({
@@ -804,6 +813,8 @@ class Scheduler:
             "kwargs": kwargs,
             "next_run": time.time(),
             "active": True,
+            "runs": 0,
+            "errors": 0,
         })
         log_ok(f"Scheduled: '{name}' every {interval_sec}s")
 
@@ -812,14 +823,49 @@ class Scheduler:
             t = self.tasks.pop(index)
             log_ok(f"Removed: '{t['name']}'")
 
+    @property
+    def is_running(self):
+        return self._running
+
+    def status_line(self):
+        """One-line status for display in main menu."""
+        if not self._running:
+            return None
+        active = sum(1 for t in self.tasks if t["active"])
+        next_t = ""
+        soonest = None
+        now = time.time()
+        for t in self.tasks:
+            if t["active"]:
+                remaining = max(0, t["next_run"] - now)
+                if soonest is None or remaining < soonest:
+                    soonest = remaining
+                    next_t = t["name"]
+        if soonest is not None:
+            m, s = divmod(int(soonest), 60)
+            h, m = divmod(m, 60)
+            if h > 0:
+                eta = f"{h}h{m:02d}m"
+            elif m > 0:
+                eta = f"{m}m{s:02d}s"
+            else:
+                eta = f"{s}s"
+            return f"⏰ Scheduler: {C.G}RUNNING{C.END} — {active} task(s) — next '{next_t}' in {eta} — ✅{self._total_ok} ❌{self._total_err}"
+        return f"⏰ Scheduler: {C.G}RUNNING{C.END} — {active} task(s)"
+
     def start(self):
         if not self.tasks:
             log_warn("No tasks to run")
+            return
+        if self._running:
+            log_warn("Scheduler already running")
             return
         self._running = True
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         log_ok("Scheduler started in background")
+        log_info("You can go back to Main Menu and keep using the bot!")
+        log_info("Scheduler output is logged — view via 'View Scheduler Log'")
 
     def stop(self):
         self._running = False
@@ -829,21 +875,78 @@ class Scheduler:
         if not self.tasks:
             log_info("No scheduled tasks")
             return
+        now = time.time()
         print(f"\n  {C.BOLD}Scheduled Tasks:{C.END}")
+        if self._running:
+            print(f"  {C.G}● RUNNING{C.END}  (runs: {self._total_runs} | ok: {self._total_ok} | err: {self._total_err})")
         for i, t in enumerate(self.tasks):
             st = f"{C.G}active{C.END}" if t["active"] else f"{C.R}paused{C.END}"
-            print(f"    {i+1}. {t['name']} — every {t['interval']}s — {st}")
+            remaining = max(0, t["next_run"] - now) if self._running else 0
+            m, s = divmod(int(remaining), 60)
+            h, m = divmod(m, 60)
+            if self._running and t["active"]:
+                if h > 0:
+                    eta = f" — next in {h}h{m:02d}m{s:02d}s"
+                else:
+                    eta = f" — next in {m}m{s:02d}s"
+            else:
+                eta = ""
+            print(f"    {i+1}. {t['name']} — every {t['interval']}s — {st} — runs: {t['runs']}{eta}")
+
+    def show_log(self, n=30):
+        """Show last N scheduler log entries."""
+        with self._log_lock:
+            entries = list(self._log[-n:])
+        if not entries:
+            log_info("Scheduler log is empty")
+            return
+        print(f"\n  {C.BOLD}📋 Scheduler Log (last {len(entries)} entries):{C.END}")
+        print(f"  {C.DIM}{'─' * 55}{C.END}")
+        for line in entries:
+            print(f"  {line}")
+        print(f"  {C.DIM}{'─' * 55}{C.END}")
+
+    def _bg_log(self, msg, color=C.CY):
+        """Log to buffer instead of printing (for background thread)."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        line = f"{C.DIM}[{ts}]{C.END} {color}{msg}{C.END}"
+        with self._log_lock:
+            self._log.append(line)
+            # Keep max 200 entries
+            if len(self._log) > 200:
+                self._log = self._log[-200:]
 
     def _loop(self):
+        """Background loop — all output goes to buffer, not stdout."""
         while self._running:
             now = time.time()
             for t in self.tasks:
                 if t["active"] and now >= t["next_run"]:
-                    log_info(f"[Scheduler] Running: {t['name']}")
+                    self._bg_log(f"▶ Running: {t['name']}")
+                    self._total_runs += 1
                     try:
-                        t["func"](*t["args"], **t["kwargs"])
+                        # Redirect stdout temporarily to capture task output
+                        import io
+                        old_stdout = sys.stdout
+                        capture = io.StringIO()
+                        sys.stdout = capture
+                        try:
+                            t["func"](*t["args"], **t["kwargs"])
+                        finally:
+                            sys.stdout = old_stdout
+                        # Save captured output to log
+                        output = capture.getvalue().strip()
+                        if output:
+                            for line in output.split("\n")[-10:]:  # last 10 lines
+                                self._bg_log(f"  {line.strip()}", C.DIM)
+                        t["runs"] += 1
+                        self._total_ok += 1
+                        self._bg_log(f"✅ Done: {t['name']} (run #{t['runs']})", C.G)
                     except Exception as e:
-                        log_err(f"[Scheduler] '{t['name']}' failed: {e}")
+                        sys.stdout = old_stdout if 'old_stdout' in dir() else sys.__stdout__
+                        t["errors"] += 1
+                        self._total_err += 1
+                        self._bg_log(f"❌ Failed: {t['name']}: {e}", C.R)
                     t["next_run"] = now + t["interval"]
             time.sleep(1)
 
@@ -867,6 +970,9 @@ class CLI:
         banner()
 
         while True:
+            # Show scheduler status if running
+            if self.scheduler.is_running:
+                print(f"\n  {self.scheduler.status_line()}")
             choice = menu_select("MAIN MENU", [
                 ("1", "⚙️  Setup & Configuration"),
                 ("2", "💸 Send Native Token"),
@@ -1273,11 +1379,12 @@ class CLI:
     def _menu_scheduler(self):
         while True:
             self.scheduler.show()
+            sched_label = "⏹ Stop Scheduler" if self.scheduler.is_running else "▶ Start Scheduler"
             choice = menu_select("⏰ SCHEDULER", [
                 ("1", "Schedule Recurring Send"),
                 ("2", "Schedule Recurring Swap"),
-                ("3", "▶ Start Scheduler"),
-                ("4", "⏹ Stop Scheduler"),
+                ("3", sched_label),
+                ("4", "📋 View Scheduler Log"),
                 ("5", "Remove Task"),
                 ("0", "← Back"),
             ])
@@ -1349,10 +1456,13 @@ class CLI:
                     interval)
 
             elif choice == "3":
-                self.scheduler.start()
+                if self.scheduler.is_running:
+                    self.scheduler.stop()
+                else:
+                    self.scheduler.start()
 
             elif choice == "4":
-                self.scheduler.stop()
+                self.scheduler.show_log()
 
             elif choice == "5":
                 self.scheduler.show()
