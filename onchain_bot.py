@@ -62,7 +62,61 @@ except Exception as e:
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
+
+# ── Known Chain ID Database ─────────────────────────────────────
+# Maps chain_id → (name, symbol, explorer, network_type)
+KNOWN_CHAINS = {
+    # ── Mainnets ──
+    1:        ("Ethereum",          "ETH",   "https://etherscan.io",              "mainnet"),
+    56:       ("BSC",               "BNB",   "https://bscscan.com",              "mainnet"),
+    137:      ("Polygon",           "MATIC", "https://polygonscan.com",          "mainnet"),
+    42161:    ("Arbitrum One",      "ETH",   "https://arbiscan.io",              "mainnet"),
+    10:       ("Optimism",          "ETH",   "https://optimistic.etherscan.io",  "mainnet"),
+    43114:    ("Avalanche",         "AVAX",  "https://snowtrace.io",             "mainnet"),
+    250:      ("Fantom",            "FTM",   "https://ftmscan.com",              "mainnet"),
+    8453:     ("Base",              "ETH",   "https://basescan.org",             "mainnet"),
+    324:      ("zkSync Era",        "ETH",   "https://explorer.zksync.io",       "mainnet"),
+    1101:     ("Polygon zkEVM",     "ETH",   "https://zkevm.polygonscan.com",    "mainnet"),
+    59144:    ("Linea",             "ETH",   "https://lineascan.build",          "mainnet"),
+    534352:   ("Scroll",            "ETH",   "https://scrollscan.com",           "mainnet"),
+    5000:     ("Mantle",            "MNT",   "https://mantlescan.xyz",           "mainnet"),
+    169:      ("Manta Pacific",     "ETH",   "https://pacific-explorer.manta.network", "mainnet"),
+    7777777:  ("Zora",              "ETH",   "https://explorer.zora.energy",     "mainnet"),
+    81457:    ("Blast",             "ETH",   "https://blastscan.io",             "mainnet"),
+    204:      ("opBNB",             "BNB",   "https://opbnbscan.com",            "mainnet"),
+    1284:     ("Moonbeam",          "GLMR",  "https://moonscan.io",              "mainnet"),
+    1285:     ("Moonriver",         "MOVR",  "https://moonriver.moonscan.io",    "mainnet"),
+    42220:    ("Celo",              "CELO",  "https://celoscan.io",              "mainnet"),
+    100:      ("Gnosis",            "xDAI",  "https://gnosisscan.io",            "mainnet"),
+    25:       ("Cronos",            "CRO",   "https://cronoscan.com",            "mainnet"),
+    1088:     ("Metis",             "METIS", "https://andromeda-explorer.metis.io", "mainnet"),
+    34443:    ("Mode",              "ETH",   "https://explorer.mode.network",    "mainnet"),
+    167000:   ("Taiko",             "ETH",   "https://taikoscan.io",             "mainnet"),
+    7560:     ("Cyber",             "ETH",   "https://cyberscan.co",             "mainnet"),
+    480:      ("World Chain",       "ETH",   "https://worldscan.org",            "mainnet"),
+    2741:     ("Abstract",          "ETH",   "https://abscan.org",               "mainnet"),
+    57073:    ("Ink",               "ETH",   "https://explorer.inkonchain.com",  "mainnet"),
+    130:      ("Unichain",          "ETH",   "https://uniscan.xyz",              "mainnet"),
+    146:      ("Sonic",             "S",     "https://sonicscan.org",            "mainnet"),
+    1868:     ("Soneium",           "ETH",   "https://soneium.blockscout.com",   "mainnet"),
+    80094:    ("Berachain",         "BERA",  "https://berascan.com",             "mainnet"),
+    # ── Testnets ──
+    11155111: ("Sepolia",           "ETH",   "https://sepolia.etherscan.io",     "testnet"),
+    17000:    ("Holesky",           "ETH",   "https://holesky.etherscan.io",     "testnet"),
+    97:       ("BSC Testnet",       "tBNB",  "https://testnet.bscscan.com",      "testnet"),
+    80002:    ("Polygon Amoy",      "MATIC", "https://amoy.polygonscan.com",     "testnet"),
+    421614:   ("Arbitrum Sepolia",  "ETH",   "https://sepolia.arbiscan.io",      "testnet"),
+    11155420: ("Optimism Sepolia",  "ETH",   "https://sepolia-optimism.etherscan.io", "testnet"),
+    43113:    ("Avalanche Fuji",    "AVAX",  "https://testnet.snowtrace.io",     "testnet"),
+    84532:    ("Base Sepolia",      "ETH",   "https://sepolia.basescan.org",     "testnet"),
+    534351:   ("Scroll Sepolia",    "ETH",   "https://sepolia.scrollscan.com",   "testnet"),
+    59141:    ("Linea Sepolia",     "ETH",   "https://sepolia.lineascan.build",  "testnet"),
+    300:      ("zkSync Sepolia",    "ETH",   "https://sepolia-era.zksync.network","testnet"),
+    168587773:("Blast Sepolia",     "ETH",   "https://sepolia.blastscan.io",     "testnet"),
+    80084:    ("Berachain Bartio",  "BERA",  "https://bartio.beratrail.io",      "testnet"),
+    1301:     ("Unichain Sepolia",  "ETH",   "https://sepolia.uniscan.xyz",      "testnet"),
+}
 
 # ── Platform Detection ──────────────────────────────────────────
 IS_TERMUX = os.path.isdir("/data/data/com.termux")
@@ -250,6 +304,25 @@ def menu_select(title, options):
         print(f"  {C.W}  [{C.CY}{key}{C.W}] {label}{C.END}")
     print(f"  {C.DIM}{'─' * 45}{C.END}")
     return input(f"  {C.Y}▸ Choose: {C.END}").strip()
+
+
+def detect_chain(rpc_url):
+    """Auto-detect chain ID, name, symbol, explorer from RPC URL.
+    Returns (chain_id, name, symbol, explorer, network_type) or None on failure."""
+    try:
+        w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 10}))
+        if not w3.is_connected():
+            return None
+        cid = w3.eth.chain_id
+        if cid in KNOWN_CHAINS:
+            name, symbol, explorer, net_type = KNOWN_CHAINS[cid]
+            return (cid, name, symbol, explorer, net_type)
+        else:
+            # Unknown chain — return ID with generic defaults
+            net = "testnet" if "test" in rpc_url.lower() else "mainnet"
+            return (cid, f"chain-{cid}", "ETH", "", net)
+    except Exception:
+        return None
 
 
 def short_addr(addr):
@@ -914,12 +987,26 @@ class CLI:
                 break
 
             elif choice == "1":
-                name       = prompt("Chain name (e.g. ethereum, bsc-testnet)")
-                rpc        = prompt("RPC URL")
-                chain_id   = prompt("Chain ID (e.g. 1, 56, 421614)")
-                symbol     = prompt("Native symbol (e.g. ETH, BNB)")
-                explorer   = prompt("Explorer URL (optional)", "")
-                net_type   = prompt("Type (mainnet/testnet)", "mainnet")
+                rpc = prompt("RPC URL")
+                if not rpc:
+                    continue
+                log_info("Detecting chain...")
+                detected = detect_chain(rpc)
+                if detected:
+                    cid, d_name, d_symbol, d_explorer, d_net = detected
+                    log_ok(f"Detected: {d_name} (Chain ID: {cid}, {d_symbol}, {d_net})")
+                    name     = prompt("Chain name", d_name)
+                    chain_id = prompt("Chain ID", str(cid))
+                    symbol   = prompt("Native symbol", d_symbol)
+                    explorer = prompt("Explorer URL", d_explorer)
+                    net_type = prompt("Type (mainnet/testnet)", d_net)
+                else:
+                    log_warn("Could not auto-detect. Enter details manually:")
+                    name     = prompt("Chain name (e.g. ethereum, bsc-testnet)")
+                    chain_id = prompt("Chain ID (e.g. 1, 56, 421614)")
+                    symbol   = prompt("Native symbol (e.g. ETH, BNB)")
+                    explorer = prompt("Explorer URL (optional)", "")
+                    net_type = prompt("Type (mainnet/testnet)", "mainnet")
                 self.config.add_chain(name, rpc, chain_id, symbol, explorer, net_type)
                 log_ok(f"Chain '{name}' added!")
 
