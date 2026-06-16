@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║              ONCHAIN AUTOMATION BOT v1.8.0                    ║
+║              ONCHAIN AUTOMATION BOT v1.9.0                    ║
 ║  Kirim · Swap · Bridge · Multi-wallet · Tugas Terjadwal       ║
 ╚═══════════════════════════════════════════════════════════════╝
 
@@ -62,7 +62,7 @@ except Exception as e:
 # KONSTANTA
 # ═══════════════════════════════════════════════════════════════
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 
 # ── Database Chain ID ───────────────────────────────────────────
 # Maps chain_id → (name, symbol, explorer, network_type, rpc_url)
@@ -439,6 +439,59 @@ KNOWN_TOKENS = {
 }
 
 
+# ═══════════════════════════════════════════════════════════════
+# DATABASE BRIDGE ROUTES YANG DIKENALI
+# (from_chain, to_chain) → list of (protocol_name, contract, bridge_type)
+# bridge_type: "op-l1-deposit", "op-l2-withdraw", "arb-l1-deposit", "generic"
+# ═══════════════════════════════════════════════════════════════
+KNOWN_BRIDGE_ROUTES = {
+    # ═══ MAINNET ═══
+    # Ethereum → L2 (OP Stack)
+    ("Ethereum", "Base"):              [("Base Official Bridge",       "0x3154Cf16ccdb4C6d922629664174b904d80F2C35", "op-l1-deposit")],
+    ("Ethereum", "Optimism"):          [("Optimism Official Bridge",   "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1", "op-l1-deposit")],
+    ("Ethereum", "Mode"):              [("Mode Official Bridge",       "0x735aDBbE72226BD52e818b7181C3a6024F4E5d47", "op-l1-deposit")],
+    ("Ethereum", "Zora"):              [("Zora Official Bridge",       "0x3e2Ea9B1921DE8a299622a0d920689AB3B2fb5aF", "op-l1-deposit")],
+    ("Ethereum", "Mantle"):            [("Mantle Official Bridge",     "0x95fC37A27a2f68e3A647CDc081F0A89bb47c3012", "op-l1-deposit")],
+    # Ethereum → Arbitrum
+    ("Ethereum", "Arbitrum One"):      [("Arbitrum Official Bridge",   "0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f", "arb-l1-deposit")],
+    # L2 → Ethereum (OP Stack — semua pakai pre-deploy yang sama)
+    ("Base", "Ethereum"):              [("Base Official Bridge",       "0x4200000000000000000000000000000000000010", "op-l2-withdraw")],
+    ("Optimism", "Ethereum"):          [("Optimism Official Bridge",   "0x4200000000000000000000000000000000000010", "op-l2-withdraw")],
+    ("Mode", "Ethereum"):              [("Mode Official Bridge",       "0x4200000000000000000000000000000000000010", "op-l2-withdraw")],
+    ("Zora", "Ethereum"):              [("Zora Official Bridge",       "0x4200000000000000000000000000000000000010", "op-l2-withdraw")],
+    ("Mantle", "Ethereum"):            [("Mantle Official Bridge",     "0x4200000000000000000000000000000000000010", "op-l2-withdraw")],
+
+    # ═══ TESTNET ═══
+    # Sepolia → L2 Testnets (OP Stack)
+    ("Sepolia", "Base Sepolia"):       [("Base Official Bridge",       "0xfd0Bf71F60660E2f608ed56e1659C450eB113120", "op-l1-deposit")],
+    ("Sepolia", "Optimism Sepolia"):   [("Optimism Official Bridge",   "0xFBb0621E0B23b5478B630BD55a5f21f67730B0F1", "op-l1-deposit")],
+    # Sepolia → Arbitrum
+    ("Sepolia", "Arbitrum Sepolia"):   [("Arbitrum Official Bridge",   "0xaAe29B0366299461418F5324a79Afc425BE5ae21", "arb-l1-deposit")],
+    # L2 Testnets → Sepolia (OP Stack)
+    ("Base Sepolia", "Sepolia"):       [("Base Official Bridge",       "0x4200000000000000000000000000000000000010", "op-l2-withdraw")],
+    ("Optimism Sepolia", "Sepolia"):   [("Optimism Official Bridge",   "0x4200000000000000000000000000000000000010", "op-l2-withdraw")],
+}
+
+# ABI minimal per tipe bridge
+BRIDGE_ABIS = {
+    "op-l1-deposit": [{"inputs": [
+        {"name": "_to", "type": "address"},
+        {"name": "_minGasLimit", "type": "uint32"},
+        {"name": "_extraData", "type": "bytes"}
+    ], "name": "depositETHTo", "outputs": [], "stateMutability": "payable", "type": "function"}],
+
+    "op-l2-withdraw": [{"inputs": [
+        {"name": "_to", "type": "address"},
+        {"name": "_minGasLimit", "type": "uint32"},
+        {"name": "_extraData", "type": "bytes"}
+    ], "name": "bridgeETHTo", "outputs": [], "stateMutability": "payable", "type": "function"}],
+
+    "arb-l1-deposit": [{"inputs": [], "name": "depositEth",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "stateMutability": "payable", "type": "function"}],
+}
+
+
 def detect_chain(rpc_url):
     """Deteksi otomatis chain ID, nama, simbol, explorer dari URL RPC.
     Return (chain_id, nama, simbol, explorer, tipe_jaringan) atau None jika gagal."""
@@ -593,10 +646,11 @@ class Config:
 
     # ── Kontrak Bridge ──────────────────────────────────────────
 
-    def add_bridge(self, name, chain_from, chain_to, contract_address=""):
+    def add_bridge(self, name, chain_from, chain_to, contract_address="", bridge_type="generic"):
         entry = {
             "from_chain": chain_from,
             "to_chain": chain_to,
+            "bridge_type": bridge_type,
         }
         if contract_address and contract_address.strip():
             entry["contract"] = Web3.to_checksum_address(contract_address.strip())
@@ -931,18 +985,46 @@ class BlockchainEngine:
 
     # ── Bridge (Generik) ────────────────────────────────────────
 
-    def bridge_native(self, wallet, bridge_contract, dest_chain_id, amount_ether):
+    def bridge_native(self, wallet, bridge_contract, dest_chain_id, amount_ether, bridge_type="generic"):
         """
-        Bridge token native via kontrak bridge generik.
+        Bridge token native via kontrak bridge.
 
-        ⚠️  ABI Bridge sangat bervariasi. Implementasi ini mengirim nilai native
-        dengan calldata generik `bridge(uint256, address)`. Kamu mungkin perlu
-        menyesuaikan encoding calldata untuk protokol bridge spesifik
-        (Stargate, Hop, Across, LayerZero, dll.).
+        Mendukung beberapa tipe bridge:
+        - op-l1-deposit  : OP Stack L1 → L2 (depositETHTo)
+        - op-l2-withdraw : OP Stack L2 → L1 (bridgeETHTo)
+        - arb-l1-deposit : Arbitrum L1 → L2 (depositEth)
+        - generic        : Calldata generik bridge(uint256, address)
         """
         info = self._chain_info()
         amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
+        addr = Web3.to_checksum_address(wallet["address"])
+        contract_addr = Web3.to_checksum_address(bridge_contract)
 
+        log_info(f"Bridging {amount_ether} {info['symbol']} → chain {dest_chain_id} [{bridge_type}]")
+
+        if bridge_type in BRIDGE_ABIS:
+            abi = BRIDGE_ABIS[bridge_type]
+            contract = self.w3.eth.contract(address=contract_addr, abi=abi)
+
+            if bridge_type == "op-l1-deposit":
+                func = contract.functions.depositETHTo(addr, 200_000, b"")
+            elif bridge_type == "op-l2-withdraw":
+                func = contract.functions.bridgeETHTo(addr, 200_000, b"")
+            elif bridge_type == "arb-l1-deposit":
+                func = contract.functions.depositEth()
+            else:
+                func = None
+
+            if func:
+                tx = func.build_transaction({
+                    "from": addr,
+                    "value": amount_wei,
+                })
+                tx["_type"] = "bridge"
+                return self._build_and_send(tx, wallet["private_key"], wallet["address"])
+
+        # Fallback: generic bridge(uint256, address)
+        log_warn("Menggunakan ABI generik — mungkin tidak kompatibel dengan semua bridge")
         selector = Web3.keccak(text="bridge(uint256,address)")[:4]
         data = (
             selector
@@ -950,11 +1032,9 @@ class BlockchainEngine:
             + bytes.fromhex(wallet["address"][2:].zfill(64))
         )
 
-        log_info(f"Bridging {amount_ether} {info['symbol']} → chain {dest_chain_id}")
-
         tx = {
-            "from": Web3.to_checksum_address(wallet["address"]),
-            "to": Web3.to_checksum_address(bridge_contract),
+            "from": addr,
+            "to": contract_addr,
             "value": amount_wei,
             "data": "0x" + data.hex(),
             "_type": "bridge",
@@ -1482,18 +1562,7 @@ class CLI:
                 log_ok(f"Token '{sym}' ditambahkan di {chain}!")
 
             elif choice == "5":
-                name   = prompt("Nama bridge (misal: stargate, hop, custom)")
-                log_info("Pilih chain asal:")
-                cfrom  = self._pick_chain_name("Chain Asal")
-                if not cfrom:
-                    continue
-                log_info("Pilih chain tujuan:")
-                cto    = self._pick_chain_name("Chain Tujuan")
-                if not cto:
-                    continue
-                addr   = prompt("Alamat kontrak bridge (kosongkan jika belum tahu)", "")
-                self.config.add_bridge(name, cfrom, cto, addr)
-                log_ok(f"Bridge '{name}' berhasil ditambahkan! ({cfrom} → {cto})")
+                self._setup_bridge()
 
             elif choice == "6":
                 self._print_full_config()
@@ -1524,6 +1593,57 @@ class CLI:
                 contract_str = short_addr(info['contract']) if info.get('contract') else "(belum ada kontrak)"
                 print(f"    • {C.CY}{nm}{C.END} — {info['from_chain']} → {info['to_chain']} — {contract_str}")
         print(f"  {'═' * 55}")
+
+    # ── Setup Bridge (auto-detect + manual) ──────────────────────
+
+    def _setup_bridge(self):
+        """Setup bridge baru — otomatis deteksi rute yang dikenali, atau manual."""
+        log_info("Pilih chain asal:")
+        cfrom = self._pick_chain_name("Chain Asal")
+        if not cfrom:
+            return
+        log_info("Pilih chain tujuan:")
+        cto = self._pick_chain_name("Chain Tujuan")
+        if not cto:
+            return
+
+        route_key = (cfrom, cto)
+        known = KNOWN_BRIDGE_ROUTES.get(route_key, [])
+
+        if known:
+            print(f"\n  {C.BOLD}Bridge yang dikenali untuk {C.CY}{cfrom} → {cto}{C.END}{C.BOLD}:{C.END}")
+            for i, (pname, paddr, ptype) in enumerate(known, 1):
+                type_label = {
+                    "op-l1-deposit": "OP Stack (L1→L2)",
+                    "op-l2-withdraw": "OP Stack (L2→L1)",
+                    "arb-l1-deposit": "Arbitrum (L1→L2)",
+                }.get(ptype, ptype)
+                print(f"    {C.BOLD}{i}.{C.END} {C.CY}{pname}{C.END}")
+                print(f"       Kontrak: {short_addr(paddr)} | Tipe: {type_label}")
+            print(f"    {C.BOLD}{len(known)+1}.{C.END} {C.Y}✏️  Setup manual{C.END}")
+            print()
+
+            try:
+                pick = int(prompt("Pilih nomor")) - 1
+                if 0 <= pick < len(known):
+                    pname, paddr, ptype = known[pick]
+                    bname = f"{cfrom.lower()}-{cto.lower()}".replace(" ", "-")
+                    self.config.add_bridge(bname, cfrom, cto, paddr, ptype)
+                    log_ok(f"Bridge '{bname}' ditambahkan! ({cfrom} → {cto})")
+                    log_ok(f"Kontrak & ABI otomatis: {pname} [{ptype}]")
+                    return
+            except ValueError:
+                pass
+
+        # Manual setup
+        if not known:
+            log_info(f"Tidak ada bridge yang dikenali untuk {cfrom} → {cto}")
+        name = prompt("Nama bridge (misal: stargate, hop, custom)")
+        addr = prompt("Alamat kontrak bridge (kosongkan jika belum tahu)", "")
+        self.config.add_bridge(name, cfrom, cto, addr, "generic")
+        log_ok(f"Bridge '{name}' berhasil ditambahkan! ({cfrom} → {cto})")
+        if not addr:
+            log_warn("Kontrak belum diisi — nanti diminta saat eksekusi bridge")
 
     # ── Hapus Konfigurasi ────────────────────────────────────────
 
@@ -1798,18 +1918,9 @@ class CLI:
         if not bridges:
             log_warn("Belum ada bridge. Mau setup bridge sekarang?")
             if confirm("Setup bridge baru?"):
-                name = prompt("Nama bridge (misal: stargate, hop, custom)")
-                log_info("Pilih chain asal:")
-                cfrom = self._pick_chain_name("Chain Asal")
-                if not cfrom: return
-                log_info("Pilih chain tujuan:")
-                cto = self._pick_chain_name("Chain Tujuan")
-                if not cto: return
-                addr = prompt("Alamat kontrak bridge (kosongkan jika belum tahu)", "")
-                self.config.add_bridge(name, cfrom, cto, addr)
-                log_ok(f"Bridge '{name}' berhasil ditambahkan! ({cfrom} → {cto})")
+                self._setup_bridge()
                 bridges = self.config.get_bridges()
-            else:
+            if not bridges:
                 return
 
         b_list = list(bridges.items())
@@ -1820,7 +1931,8 @@ class CLI:
             dst = info['to_chain']
             src_sym = chains.get(src, {}).get("symbol", "?")
             dst_sym = chains.get(dst, {}).get("symbol", "?")
-            status = f"{C.G}✓ kontrak{C.END}" if info.get("contract") else f"{C.Y}tanpa kontrak{C.END}"
+            btype = info.get("bridge_type", "generic")
+            status = f"{C.G}✓ {btype}{C.END}" if info.get("contract") else f"{C.Y}tanpa kontrak{C.END}"
             print(f"    {i}. {C.CY}{n}{C.END} — {src} ({src_sym}) → {dst} ({dst_sym}) [{status}]")
         print()
 
@@ -1832,6 +1944,7 @@ class CLI:
             log_err("Masukkan angka"); return
 
         bname, binfo = b_list[bi]
+        bridge_type = binfo.get("bridge_type", "generic")
 
         # Cek apakah kontrak bridge ada
         contract = binfo.get("contract", "")
@@ -1840,7 +1953,6 @@ class CLI:
             contract = prompt("Masukkan alamat kontrak bridge untuk melanjutkan", "")
             if not contract:
                 log_err("Tidak bisa bridge tanpa alamat kontrak."); return
-            # Simpan kontrak untuk nanti
             binfo["contract"] = Web3.to_checksum_address(contract.strip())
             self.config.data["bridge_contracts"][bname] = binfo
             self.config.save()
@@ -1860,16 +1972,26 @@ class CLI:
             dest_id = prompt("Chain ID tujuan (tidak terdeteksi otomatis)")
 
         src_sym = chains.get(binfo["from_chain"], {}).get("symbol", "?")
+        type_label = {
+            "op-l1-deposit": "OP Stack (L1→L2) — depositETHTo",
+            "op-l2-withdraw": "OP Stack (L2→L1) — bridgeETHTo",
+            "arb-l1-deposit": "Arbitrum (L1→L2) — depositEth",
+            "generic": "Generik — bridge(uint256,address)",
+        }.get(bridge_type, bridge_type)
+
         print(f"\n  {C.BOLD}Pratinjau Bridge:{C.END}")
         print(f"    Bridge      : {C.CY}{bname}{C.END}")
         print(f"    Rute        : {binfo['from_chain']} → {binfo['to_chain']}")
         print(f"    Chain ID    : {dest_id}")
         print(f"    Jumlah      : {C.G}{amount} {src_sym}{C.END}")
         print(f"    Kontrak     : {binfo['contract']}")
-        log_warn("ABI Bridge bervariasi! Pastikan kontrak sesuai dengan interface generik.")
+        print(f"    Tipe ABI    : {C.CY}{type_label}{C.END}")
+
+        if bridge_type == "generic":
+            log_warn("ABI generik — mungkin tidak kompatibel dengan semua bridge")
 
         if confirm("Jalankan bridge?"):
-            self.engine.bridge_native(wallet, binfo["contract"], dest_id, amount)
+            self.engine.bridge_native(wallet, binfo["contract"], dest_id, amount, bridge_type)
 
     # ── Penjadwal ───────────────────────────────────────────────
 

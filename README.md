@@ -23,7 +23,7 @@
 | 📤 **Multi-Kirim** | Kirim batch ke banyak alamat sekaligus |
 | 🎲 **Kirim Acak** | Buat alamat acak otomatis dan kirim ke masing-masing |
 | 🔄 **Swap** | Tukar token via DEX kompatibel Uniswap V2 |
-| 🌉 **Bridge** | Bridge token antar chain (dukungan bridge generik) |
+| 🌉 **Bridge** | Bridge token antar chain (auto-detect rute + ABI yang benar) |
 | 👛 **Multi-Wallet** | Kelola banyak wallet dengan round-robin atau acak |
 | ⏰ **Penjadwal** | Atur tugas kirim/swap berulang yang jalan otomatis |
 | 🌐 **Semua Chain EVM** | Berjalan di SEMUA chain EVM — cukup tambahkan URL RPC |
@@ -169,14 +169,24 @@ Pilih: 3 (Tambah DEX Router)
 
 ### 🌉 Bridge Token
 
-Bridge token native ke chain lain:
+Bridge token native ke chain lain — otomatis deteksi rute & ABI!
 
-1. Konfigurasi kontrak bridge di Pengaturan
-2. Pilih bridge
-3. Pilih jumlah
-4. Jalankan
+1. Pilih chain asal → Pilih chain tujuan
+2. Bot otomatis tampilkan bridge yang dikenali (kontrak + ABI yang benar)
+3. Pilih nomor → Otomatis!
+4. Atau pilih "Setup manual" untuk bridge kustom
 
-> ⚠️ ABI kontrak bridge sangat bervariasi antar protokol. Implementasi default menggunakan interface generik `bridge(uint256, address)`. Kamu mungkin perlu menyesuaikan encoding calldata untuk bridge spesifik kamu.
+**Bridge yang didukung (otomatis):**
+
+| Tipe | Protokol | Rute |
+|------|----------|------|
+| OP Stack L1→L2 | Base, Optimism, Mode, Zora, Mantle | Ethereum → L2 |
+| OP Stack L2→L1 | Base, Optimism, Mode, Zora, Mantle | L2 → Ethereum |
+| Arbitrum L1→L2 | Arbitrum One | Ethereum → Arbitrum |
+| OP Testnet | Base Sepolia, Optimism Sepolia | Sepolia ↔ L2 |
+| Arb Testnet | Arbitrum Sepolia | Sepolia → Arbitrum |
+
+> 💡 Untuk rute yang tidak dikenali, gunakan mode manual dengan ABI generik `bridge(uint256, address)`. Kamu juga bisa memasukkan kontrak bridge kustom.
 
 ### ⏰ Tugas Terjadwal
 
