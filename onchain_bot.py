@@ -1289,6 +1289,216 @@ class BlockchainEngine:
         tx["_type"] = "swap_token_ke_token"
         return self._build_and_send(tx, wallet["private_key"], wallet["address"])
 
+    # ── Auto-Detect Best DEX ─────────────────────────────────────
+
+    def find_best_dex(self, chain, token_in, token_out, amount_in_raw,
+                      sender, is_native_in=False, is_native_out=False):
+        """Scan semua DEX di chain aktif, bandingkan output, return yang terbaik.
+
+        Args:
+            chain: nama chain (key dari config chains)
+            token_in: alamat token input (atau WETH address jika native)
+            token_out: alamat token output (atau WETH address jika native)
+            amount_in_raw: jumlah input dalam wei/raw units
+            sender: alamat wallet pengirim
+            is_native_in: True jika input native ETH/BNB/dll (bukan ERC-20)
+            is_native_out: True jika output native ETH/BNB/dll
+
+        Returns:
+            list of dict, sorted by output (terbesar duluan):
+            [{"dex_name": str, "router_address": str, "router_type": str,
+              "output": int, "fee_tier": int|None, "weth": str}, ...]
+        """
+        routers = self.config.get_dex_routers(chain) if self.config else {}
+        in_cs = Web3.to_checksum_address(token_in)
+        out_cs = Web3.to_checksum_address(token_out)
+        results = []
+
+        for rname, rinfo in routers.items():
+            raddr = rinfo.get("address", "")
+            if not raddr:
+                continue
+            rtype = self._detect_router_type(rname, rinfo)
+
+            try:
+                if rtype == "v3":
+                    # ── V3: cari fee tier terbaik via exactInputSingle ──
+                    router_v3 = self._get_router_v3(raddr)
+                    value = amount_in_raw if is_native_in else 0
+                    best_fee, best_out = self._find_best_fee_v3(
+                        router_v3, in_cs, out_cs, amount_in_raw, sender, value=value
+                    )
+                    if best_out > 0:
+                        results.append({
+                            "dex_name": rname,
+                            "router_address": raddr,
+                            "router_type": "v3",
+                            "output": best_out,
+                            "fee_tier": best_fee,
+                            "weth": rinfo.get("weth", ""),
+                        })
+                else:
+                    # ── V2: quote via getAmountsOut ──
+                    router_v2 = self._get_router(raddr)
+                    path = [in_cs, out_cs]
+                    amounts = router_v2.functions.getAmountsOut(amount_in_raw, path).call()
+                    out_amount = amounts[-1]
+                    if out_amount > 0:
+                        results.append({
+                            "dex_name": rname,
+                            "router_address": raddr,
+                            "router_type": "v2",
+                            "output": out_amount,
+                            "fee_tier": None,
+                            "weth": rinfo.get("weth", ""),
+                        })
+            except Exception:
+                # DEX ini gagal quote — skip (pair mungkin tidak ada)
+                continue
+
+        # Sort descending by output
+        results.sort(key=lambda x: x["output"], reverse=True)
+        return results
+
+    def swap_best_dex(self, wallet, chain, token_address, amount, slippage=5,
+                      direction="native_to_token"):
+        """Otomatis pilih DEX terbaik dan eksekusi swap.
+
+        Args:
+            direction: "native_to_token" | "token_to_native" | "token_to_token"
+            token_address: alamat token (untuk native_to_token / token_to_native)
+                           atau tuple (token_in, token_out) untuk token_to_token
+        """
+        info = self._chain_info()
+        addr = Web3.to_checksum_address(wallet["address"])
+        routers = self.config.get_dex_routers(chain) if self.config else {}
+
+        if not routers:
+            raise ValueError(f"Tidak ada DEX router yang dikonfigurasi di {chain}.")
+
+        # Tentukan token_in, token_out, dan amount_raw
+        if direction == "native_to_token":
+            amount_raw = self.w3.to_wei(Decimal(str(amount)), "ether")
+            # Butuh WETH — ambil dari router pertama yang punya
+            weth = None
+            for _rn, ri in routers.items():
+                try:
+                    rt = self._detect_router_type(_rn, ri)
+                    r = self._get_router(ri["address"]) if rt == "v2" else self._get_router_v3(ri["address"])
+                    if rt == "v2":
+                        weth = self._get_wrapped_native(r, ri["address"])
+                    else:
+                        r2 = self._get_router(ri["address"])
+                        weth = self._get_wrapped_native(r2, ri["address"])
+                    break
+                except Exception:
+                    continue
+            if not weth:
+                raise ValueError("Tidak bisa mendeteksi WETH dari router yang ada.")
+            token_in = weth
+            token_out = token_address
+            is_native_in, is_native_out = True, False
+
+        elif direction == "token_to_native":
+            token = self.w3.eth.contract(
+                address=Web3.to_checksum_address(token_address), abi=ERC20_ABI
+            )
+            decimals = token.functions.decimals().call()
+            amount_raw = int(Decimal(str(amount)) * Decimal(10 ** decimals))
+            weth = None
+            for _rn, ri in routers.items():
+                try:
+                    r = self._get_router(ri["address"])
+                    weth = self._get_wrapped_native(r, ri["address"])
+                    break
+                except Exception:
+                    continue
+            if not weth:
+                raise ValueError("Tidak bisa mendeteksi WETH dari router yang ada.")
+            token_in = token_address
+            token_out = weth
+            is_native_in, is_native_out = False, True
+
+        elif direction == "token_to_token":
+            if not isinstance(token_address, (list, tuple)) or len(token_address) != 2:
+                raise ValueError("Untuk token→token, token_address harus tuple (token_in, token_out)")
+            t_in_addr, t_out_addr = token_address
+            tok_in = self.w3.eth.contract(
+                address=Web3.to_checksum_address(t_in_addr), abi=ERC20_ABI
+            )
+            decimals = tok_in.functions.decimals().call()
+            amount_raw = int(Decimal(str(amount)) * Decimal(10 ** decimals))
+            token_in = t_in_addr
+            token_out = t_out_addr
+            is_native_in, is_native_out = False, False
+        else:
+            raise ValueError(f"Direction tidak dikenali: {direction}")
+
+        # Scan semua DEX
+        log_info(f"🔍 Scanning semua DEX di {chain}…")
+        quotes = self.find_best_dex(
+            chain, token_in, token_out, amount_raw, addr,
+            is_native_in=is_native_in, is_native_out=is_native_out
+        )
+
+        if not quotes:
+            raise ValueError(
+                "Tidak ada DEX yang bisa memproses swap ini.\n"
+                "  Pastikan pair sudah ada liquidity di salah satu DEX."
+            )
+
+        # Tampilkan perbandingan harga
+        log_info(f"📊 Hasil perbandingan {len(quotes)} DEX:")
+        for i, q in enumerate(quotes):
+            tag = f"[V3 fee={q['fee_tier']}]" if q["router_type"] == "v3" else "[V2]"
+            marker = " ← TERBAIK ✅" if i == 0 else ""
+            if is_native_out or direction == "native_to_token":
+                out_human = self.w3.from_wei(q["output"], "ether")
+            else:
+                # Untuk token output, perlu tahu decimals
+                try:
+                    tok_out_c = self.w3.eth.contract(
+                        address=Web3.to_checksum_address(token_out), abi=ERC20_ABI
+                    )
+                    d = tok_out_c.functions.decimals().call()
+                    out_human = Decimal(q["output"]) / Decimal(10 ** d)
+                except Exception:
+                    out_human = q["output"]
+            log_info(f"  {i+1}. {q['dex_name']} {tag}: {out_human}{marker}")
+
+        # Eksekusi swap di DEX terbaik
+        best = quotes[0]
+        log_info(f"⚡ Menggunakan {best['dex_name']} ({best['router_type'].upper()})…")
+
+        if direction == "native_to_token":
+            if best["router_type"] == "v3":
+                return self.swap_native_to_token_v3(
+                    wallet, best["router_address"], token_out, amount, slippage, best["fee_tier"]
+                )
+            else:
+                return self.swap_native_to_token(
+                    wallet, best["router_address"], token_out, amount, slippage
+                )
+        elif direction == "token_to_native":
+            if best["router_type"] == "v3":
+                return self.swap_token_to_native_v3(
+                    wallet, best["router_address"], token_in, amount, slippage, best["fee_tier"]
+                )
+            else:
+                return self.swap_token_to_native(
+                    wallet, best["router_address"], token_in, amount, slippage
+                )
+        elif direction == "token_to_token":
+            t_in_addr, t_out_addr = token_address
+            if best["router_type"] == "v3":
+                return self.swap_token_to_token_v3(
+                    wallet, best["router_address"], t_in_addr, t_out_addr, amount, slippage, best["fee_tier"]
+                )
+            else:
+                return self.swap_token_to_token(
+                    wallet, best["router_address"], t_in_addr, t_out_addr, amount, slippage
+                )
+
     # ── Swap (Uniswap V3) ─────────────────────────────────────
 
     def _find_best_fee_v3(self, router_v3, token_in, token_out, amount_in, sender, value=0):
@@ -2375,17 +2585,22 @@ class CLI:
 
         r_list = list(routers.items())
         print(f"\n  {C.BOLD}DEX Router:{C.END}")
+        print(f"    {C.G}{C.BOLD}0. 🔍 Auto Best DEX (scan semua, pilih harga terbaik){C.END}")
         for i, (n, info) in enumerate(r_list, 1):
             rtype = self.engine._detect_router_type(n, info)
             tag = f" {C.M}[{rtype.upper()}]{C.END}" if rtype == "v3" else ""
             print(f"    {i}. {C.CY}{n}{C.END}{tag} — {short_addr(info['address'])}")
-        ri = int(prompt("Pilih router")) - 1
-        rname, rinfo = r_list[ri]
+        ri = int(prompt("Pilih router (0=auto)")) - 1
+        use_best_dex = (ri == -1)  # user chose 0
 
-        # Deteksi tipe router
-        router_type = self.engine._detect_router_type(rname, rinfo)
-        if router_type == "v3":
-            log_info(f"Router V3 terdeteksi — menggunakan Uniswap V3 swap")
+        if use_best_dex:
+            rname, rinfo, router_type = None, None, None
+            log_info("🔍 Mode Auto Best DEX — akan scan semua DEX saat swap")
+        else:
+            rname, rinfo = r_list[ri]
+            router_type = self.engine._detect_router_type(rname, rinfo)
+            if router_type == "v3":
+                log_info(f"Router V3 terdeteksi — menggunakan Uniswap V3 swap")
 
         stype = menu_select("Arah Swap", [
             ("1", "Native → Token"),
@@ -2414,9 +2629,9 @@ class CLI:
         slippage = float(prompt("Slippage %", "5"))
         tokens = self.config.get_tokens(chain)
 
-        # Pilih fee tier untuk V3
+        # Pilih fee tier untuk V3 (skip jika Auto Best DEX)
         v3_fee = None
-        if router_type == "v3":
+        if not use_best_dex and router_type == "v3":
             fee_choice = menu_select("Fee Tier V3", [
                 ("0", "🔍 Auto-detect (cari terbaik)"),
                 ("1", "0.01% — stablecoin pairs"),
@@ -2446,7 +2661,9 @@ class CLI:
                 amount = self._select_amount()
                 if not amount: return
                 if confirm(f"Swap {amount} native → token?"):
-                    if router_type == "v3":
+                    if use_best_dex:
+                        self.engine.swap_best_dex(wallet, chain, token, amount, slippage, "native_to_token")
+                    elif router_type == "v3":
                         self.engine.swap_native_to_token_v3(wallet, rinfo["address"], token, amount, slippage, v3_fee)
                     else:
                         self.engine.swap_native_to_token(wallet, rinfo["address"], token, amount, slippage)
@@ -2455,7 +2672,9 @@ class CLI:
                 token = pick_token("token yang dijual")
                 amount = prompt("Jumlah yang dijual")
                 if confirm(f"Swap {amount} token → native?"):
-                    if router_type == "v3":
+                    if use_best_dex:
+                        self.engine.swap_best_dex(wallet, chain, token, amount, slippage, "token_to_native")
+                    elif router_type == "v3":
                         self.engine.swap_token_to_native_v3(wallet, rinfo["address"], token, amount, slippage, v3_fee)
                     else:
                         self.engine.swap_token_to_native(wallet, rinfo["address"], token, amount, slippage)
@@ -2465,7 +2684,9 @@ class CLI:
                 t_out = pick_token("token yang dibeli")
                 amount = prompt("Jumlah yang dijual")
                 if confirm(f"Swap {amount} token → token?"):
-                    if router_type == "v3":
+                    if use_best_dex:
+                        self.engine.swap_best_dex(wallet, chain, (t_in, t_out), amount, slippage, "token_to_token")
+                    elif router_type == "v3":
                         self.engine.swap_token_to_token_v3(wallet, rinfo["address"], t_in, t_out, amount, slippage, v3_fee)
                     else:
                         self.engine.swap_token_to_token(wallet, rinfo["address"], t_in, t_out, amount, slippage)
@@ -2617,23 +2838,86 @@ class CLI:
                 wallet = self._select_wallet()
                 if not wallet: continue
 
+                # Pilih router atau auto best DEX
                 r_list = list(routers.items())
+                print(f"\n  {C.BOLD}DEX Router:{C.END}")
+                print(f"    {C.G}{C.BOLD}0. 🔍 Auto Best DEX (scan setiap eksekusi){C.END}")
                 for i, (n, info) in enumerate(r_list, 1):
-                    print(f"    {i}. {n}")
-                ri = int(prompt("Pilih router")) - 1
-                rinfo = r_list[ri][1]
+                    rtype = self.engine._detect_router_type(n, info)
+                    tag = f" [{rtype.upper()}]" if rtype == "v3" else ""
+                    print(f"    {i}. {n}{tag}")
+                ri = int(prompt("Pilih router (0=auto)")) - 1
+                sched_use_best = (ri == -1)
 
-                token    = prompt("Alamat token yang dibeli")
+                # Pilih arah swap
+                sched_dir = menu_select("Arah Swap Terjadwal", [
+                    ("1", "Native → Token"),
+                    ("2", "Token → Native"),
+                    ("3", "Token → Token"),
+                ])
+
+                if sched_dir in ("1", "2"):
+                    token = prompt("Alamat token")
+                else:
+                    t_in  = prompt("Alamat token yang dijual")
+                    t_out = prompt("Alamat token yang dibeli")
+                    token = (t_in, t_out)
+
                 amount   = self._select_amount()
                 if not amount: continue
                 slippage = float(prompt("Slippage %", "5"))
                 interval = int(prompt("Interval (detik)", "3600"))
-                name     = prompt("Nama tugas", f"swap-{chain}")
 
-                self.scheduler.add(name,
-                    lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
-                        self.engine.swap_native_to_token(w, r, t, a, s),
-                    interval)
+                dir_map = {"1": "native_to_token", "2": "token_to_native", "3": "token_to_token"}
+                direction = dir_map[sched_dir]
+                dir_label = {"1": "native→token", "2": "token→native", "3": "token→token"}[sched_dir]
+                name = prompt("Nama tugas", f"swap-{dir_label}-{chain}")
+
+                if sched_use_best:
+                    # Auto Best DEX — scan semua DEX setiap kali eksekusi
+                    self.scheduler.add(name,
+                        lambda w=wallet, ch=chain, t=token, a=amount, s=slippage, d=direction:
+                            self.engine.swap_best_dex(w, ch, t, a, s, d),
+                        interval)
+                    log_info(f"📊 Swap terjadwal akan scan semua DEX setiap {interval}s")
+                else:
+                    rname, rinfo = r_list[ri]
+                    rtype = self.engine._detect_router_type(rname, rinfo)
+
+                    if direction == "native_to_token":
+                        if rtype == "v3":
+                            self.scheduler.add(name,
+                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
+                                    self.engine.swap_native_to_token_v3(w, r, t, a, s),
+                                interval)
+                        else:
+                            self.scheduler.add(name,
+                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
+                                    self.engine.swap_native_to_token(w, r, t, a, s),
+                                interval)
+                    elif direction == "token_to_native":
+                        if rtype == "v3":
+                            self.scheduler.add(name,
+                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
+                                    self.engine.swap_token_to_native_v3(w, r, t, a, s),
+                                interval)
+                        else:
+                            self.scheduler.add(name,
+                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
+                                    self.engine.swap_token_to_native(w, r, t, a, s),
+                                interval)
+                    elif direction == "token_to_token":
+                        t_in_a, t_out_a = token
+                        if rtype == "v3":
+                            self.scheduler.add(name,
+                                lambda w=wallet, r=rinfo["address"], ti=t_in_a, to=t_out_a, a=amount, s=slippage:
+                                    self.engine.swap_token_to_token_v3(w, r, ti, to, a, s),
+                                interval)
+                        else:
+                            self.scheduler.add(name,
+                                lambda w=wallet, r=rinfo["address"], ti=t_in_a, to=t_out_a, a=amount, s=slippage:
+                                    self.engine.swap_token_to_token(w, r, ti, to, a, s),
+                                interval)
 
             elif choice == "3":
                 if self.scheduler.is_running:
