@@ -251,6 +251,12 @@ ROUTER_V3_ABI = json.loads("""[
     "stateMutability":"payable","type":"function"},
 
     {"inputs":[
+        {"name":"data","type":"bytes[]"}],
+    "name":"multicall",
+    "outputs":[{"name":"results","type":"bytes[]"}],
+    "stateMutability":"payable","type":"function"},
+
+    {"inputs":[
         {"name":"amountMinimum","type":"uint256"},
         {"name":"recipient","type":"address"}],
     "name":"unwrapWETH9",
@@ -440,7 +446,7 @@ KNOWN_DEX_ROUTERS = {
         ("uniswap-v2",   "0x1689E7B1F10000AE47eBfE339a4f69dECd19F602", "0x4200000000000000000000000000000000000006", "v2"),
     ],
     "Arbitrum Sepolia": [
-        ("uniswap-v3",   "0x101F443B4d1b059569D643917553c771E1b9663E", "0x980B62Da83eFf3D4576C647993b0c1V7aaf96816", "v3"),
+        ("uniswap-v3",   "0x101F443B4d1b059569D643917553c771E1b9663E", "0x980B62Da83eFf3D4576C647993b0c1b7aaf96816", "v3"),
     ],
     "BSC Testnet": [
         ("pancakeswap",  "0xD99D1c33F9fC3444f8101754aBC46c52416550D1", "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd", "v2"),
@@ -1007,6 +1013,35 @@ class BlockchainEngine:
             return "v3"
         return "v2"
 
+    def _multicall_v3(self, router_v3, deadline, call_data_list, sender):
+        """Build multicall TX yang kompatibel dengan SwapRouter & SwapRouter02.
+        
+        SwapRouter  (original): multicall(bytes[] data)
+        SwapRouter02 (newer)  : multicall(uint256 deadline, bytes[] data)
+        
+        Coba SwapRouter02 dulu (lebih umum), fallback ke original.
+        """
+        # Coba SwapRouter02 style: multicall(deadline, data[])
+        try:
+            tx = router_v3.functions.multicall(
+                deadline, call_data_list
+            ).build_transaction({"from": sender})
+            return tx
+        except Exception:
+            pass
+
+        # Fallback: SwapRouter original: multicall(data[])
+        try:
+            tx = router_v3.functions.multicall(
+                call_data_list
+            ).build_transaction({"from": sender})
+            return tx
+        except Exception as e:
+            raise ValueError(
+                f"multicall gagal — router tidak mendukung signature yang dikenali.\n"
+                f"  Error: {e}"
+            )
+
     def _get_wrapped_native(self, router, router_address=""):
         """
         Deteksi alamat Wrapped Native Token (WETH/WMON/WBNB/dll).
@@ -1256,25 +1291,13 @@ class BlockchainEngine:
 
     # ── Swap (Uniswap V3) ─────────────────────────────────────
 
-    def _quote_v3(self, router_v3, token_in, token_out, amount_in, fee, sender):
-        """Estimasi output V3 via staticcall pada exactInputSingle."""
-        try:
-            result = router_v3.functions.exactInputSingle((
-                Web3.to_checksum_address(token_in),
-                Web3.to_checksum_address(token_out),
-                fee,
-                Web3.to_checksum_address(sender),
-                int(time.time()) + 300,
-                amount_in,
-                0,  # amountOutMinimum = 0 untuk quote
-                0,  # sqrtPriceLimitX96 = 0 (tanpa batas)
-            )).call({"from": sender, "value": amount_in if token_in.lower() == "native" else 0})
-            return result
-        except Exception:
-            return None
-
-    def _find_best_fee_v3(self, router_v3, token_in, token_out, amount_in, sender):
-        """Cari fee tier V3 terbaik (output tertinggi)."""
+    def _find_best_fee_v3(self, router_v3, token_in, token_out, amount_in, sender, value=0):
+        """Cari fee tier V3 terbaik (output tertinggi).
+        
+        Args:
+            value: msg.value untuk call(). Gunakan amount_in untuk native→token swap
+                   agar router bisa wrap ETH→WETH secara internal.
+        """
         best_fee = V3_DEFAULT_FEE
         best_out = 0
         for _key, (fee, _label) in V3_FEE_TIERS.items():
@@ -1288,7 +1311,7 @@ class BlockchainEngine:
                     amount_in,
                     0,
                     0,
-                )).call({"from": sender, "value": 0})
+                )).call({"from": sender, "value": value})
                 if out and out > best_out:
                     best_out = out
                     best_fee = fee
@@ -1317,7 +1340,8 @@ class BlockchainEngine:
         # Auto-detect fee tier terbaik jika tidak dispesifikasi
         if fee is None:
             log_info("Mencari fee tier V3 terbaik…")
-            fee, est_out = self._find_best_fee_v3(router_v3, weth_cs, token_cs, amount_in, addr)
+            # value=amount_in agar router bisa wrap ETH→WETH untuk quote
+            fee, est_out = self._find_best_fee_v3(router_v3, weth_cs, token_cs, amount_in, addr, value=amount_in)
             if est_out == 0:
                 raise ValueError(
                     "Tidak bisa menemukan pool V3 untuk pair ini.\n"
@@ -1406,10 +1430,8 @@ class BlockchainEngine:
             min_out, addr
         )._encode_transaction_data()
 
-        # Encode via multicall
-        tx = router_v3.functions.multicall(
-            deadline, [swap_data, unwrap_data]
-        ).build_transaction({"from": addr})
+        # Encode via multicall (auto-detect SwapRouter vs SwapRouter02)
+        tx = self._multicall_v3(router_v3, deadline, [swap_data, unwrap_data], addr)
         tx["_type"] = "swap_v3_token_ke_native"
         return self._build_and_send(tx, wallet["private_key"], wallet["address"])
 
