@@ -774,6 +774,8 @@ class Config:
 class BlockchainEngine:
     """Mesin inti untuk semua interaksi on-chain."""
 
+    _fee_cache: dict = {}
+
     def __init__(self, config: Config):
         self.config = config
         self.w3: Web3 | None = None
@@ -1508,6 +1510,35 @@ class BlockchainEngine:
             value: msg.value untuk call(). Gunakan amount_in untuk native→token swap
                    agar router bisa wrap ETH→WETH secara internal.
         """
+        chain_id = self._chain_info()["chain_id"]
+        cache_key = (chain_id, token_in, token_out)
+        now = time.time()
+        cached = self._fee_cache.get(cache_key)
+        if cached and now - cached[1] < 3600:
+            best_fee = cached[0]
+            # Cache hanya menyimpan best_fee, bukan output.
+            # Output bergantung amount_in, jadi kita lakukan satu quote lagi
+            # untuk mendapatkan estimasi output yang akurat dengan amount saat ini.
+            try:
+                out = router_v3.functions.exactInputSingle((
+                    Web3.to_checksum_address(token_in),
+                    Web3.to_checksum_address(token_out),
+                    best_fee,
+                    Web3.to_checksum_address(sender),
+                    int(time.time()) + 600,
+                    amount_in,
+                    0,
+                    0,
+                )).call({"from": sender, "value": value})
+            except Exception:
+                # Jika cached fee tidak valid lagi, fallback ke full scan
+                cached = None
+            if cached is not None:
+                if out and out > 0:
+                    log_info(f"[CACHE HIT] fee={best_fee} key={cache_key}")
+                    return best_fee, out
+                # Jika quote 0, fallback ke full scan
+
         best_fee = V3_DEFAULT_FEE
         best_out = 0
         for _key, (fee, _label) in V3_FEE_TIERS.items():
@@ -1527,6 +1558,8 @@ class BlockchainEngine:
                     best_fee = fee
             except Exception:
                 continue
+        self._fee_cache[cache_key] = (best_fee, now)
+        log_info(f"[CACHE MISS] fee={best_fee} key={cache_key}")
         return best_fee, best_out
 
     def swap_native_to_token_v3(self, wallet, router_address, token_address, amount_ether, slippage=5, fee=None):
@@ -1623,7 +1656,10 @@ class BlockchainEngine:
                     int(time.time()) + 600, amount_raw, 0, 0,
                 )).call({"from": addr})
             except Exception as e:
-                raise ValueError(f"Quote V3 gagal: {e}")
+                raise ValueError(
+                    f"Quote V3 gagal (Token→Native) fee={fee}"
+                    f": {e}"
+                )
 
         min_out = int(est_out * (100 - slippage) / 100)
         deadline = int(time.time()) + 300
@@ -1631,7 +1667,7 @@ class BlockchainEngine:
         log_info(f"[V3] Menukar {amount} {symbol} → {info['symbol']} (fee={fee})")
         log_info(f"Estimasi: {self.w3.from_wei(est_out, 'ether')} {info['symbol']} | Min: {self.w3.from_wei(min_out, 'ether')}")
 
-        # Multicall: exactInputSingle (recipient=router) + unwrapWETH9 (kirim ke user)
+        # Multicall: exactInputSingle (recipient=router) + unwrapWETH9 (kirim ke user) + refundETH (bersih sisa WETH/ETH di router)
         swap_data = router_v3.functions.exactInputSingle((
             token_cs, weth_cs, fee, router_addr_cs, deadline, amount_raw, min_out, 0,
         ))._encode_transaction_data()
@@ -1640,8 +1676,10 @@ class BlockchainEngine:
             min_out, addr
         )._encode_transaction_data()
 
+        cleanup_data = router_v3.functions.refundETH()._encode_transaction_data()
+
         # Encode via multicall (auto-detect SwapRouter vs SwapRouter02)
-        tx = self._multicall_v3(router_v3, deadline, [swap_data, unwrap_data], addr)
+        tx = self._multicall_v3(router_v3, deadline, [swap_data, unwrap_data, cleanup_data], addr)
         tx["_type"] = "swap_v3_token_ke_native"
         return self._build_and_send(tx, wallet["private_key"], wallet["address"])
 
@@ -1679,7 +1717,10 @@ class BlockchainEngine:
                     int(time.time()) + 600, amount_raw, 0, 0,
                 )).call({"from": addr})
             except Exception as e:
-                raise ValueError(f"Quote V3 gagal: {e}")
+                raise ValueError(
+                    f"Quote V3 gagal (Token→Token) fee={fee}"
+                    f": {e}"
+                )
 
         min_out = int(est_out * (100 - slippage) / 100)
         deadline = int(time.time()) + 300
@@ -2641,6 +2682,8 @@ class CLI:
             ])
             if fee_choice in V3_FEE_TIERS:
                 v3_fee = V3_FEE_TIERS[fee_choice][0]
+            elif fee_choice != "0":
+                log_warn("Pilihan fee tidak valid, menggunakan auto-detect.")
             # fee_choice == "0" → v3_fee tetap None (auto-detect)
 
         def pick_token(label="token"):
