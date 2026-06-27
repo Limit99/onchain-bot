@@ -31,8 +31,17 @@ import time
 import secrets
 import threading
 import traceback
+import urllib.request
+import urllib.error
 from datetime import datetime
 from decimal import Decimal
+
+# For faucet functionality
+try:
+    import requests
+except ImportError:
+    requests = None
+
 
 # ── Import web3 (mendukung v5.x dan v7.x) ──────────────────
 _WEB3_ERR = None
@@ -124,7 +133,7 @@ KNOWN_CHAINS = {
     1301:     ("Unichain Sepolia",  "ETH",   "https://sepolia.uniscan.xyz",                "testnet", "https://sepolia.unichain.org"),
     10200:    ("Gnosis Chiado",     "xDAI",  "https://gnosis-chiado.blockscout.com",       "testnet", "https://rpc.chiadochain.net"),
     5003:     ("Mantle Sepolia",    "MNT",   "https://sepolia.mantlescan.xyz",             "testnet", "https://rpc.sepolia.mantle.xyz"),
-    41455:    ("Monad Testnet",     "MON",   "https://testnet.monadexplorer.com",          "testnet", "https://testnet-rpc.monad.xyz"),
+    10143:    ("Monad Testnet",     "MON",   "https://testnet.monadexplorer.com",          "testnet", "https://testnet-rpc.monad.xyz"),
 }
 
 # ── Deteksi Platform ────────────────────────────────────────────
@@ -774,12 +783,16 @@ class Config:
 class BlockchainEngine:
     """Mesin inti untuk semua interaksi on-chain."""
 
+    _fee_cache: dict = {}
+
     def __init__(self, config: Config):
         self.config = config
         self.w3: Web3 | None = None
         self.current_chain: str | None = None
         self.tx_history: list = []
         self._load_history()
+        # Faucet-related state
+        self._faucet_last_request = {}
 
     # ── Riwayat ─────────────────────────────────────────────────
 
@@ -943,6 +956,8 @@ class BlockchainEngine:
 
     def send_native(self, wallet, to_address, amount_ether):
         """Kirim token native ke satu alamat."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
 
@@ -1089,6 +1104,8 @@ class BlockchainEngine:
 
     def wrap_native(self, wallet, amount_ether):
         """Wrap native token → wrapped token (deposit ke kontrak WETH/WMON)."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
         addr = Web3.to_checksum_address(wallet["address"])
@@ -1129,6 +1146,8 @@ class BlockchainEngine:
 
     def unwrap_native(self, wallet, amount_ether):
         """Unwrap wrapped token → native token (withdraw dari kontrak WETH/WMON)."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
         addr = Web3.to_checksum_address(wallet["address"])
@@ -1176,6 +1195,8 @@ class BlockchainEngine:
 
     def swap_native_to_token(self, wallet, router_address, token_address, amount_ether, slippage=5):
         """Swap native → ERC-20 via router kompatibel Uniswap V2."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         router = self._get_router(router_address)
         weth = self._get_wrapped_native(router, router_address)
@@ -1508,6 +1529,35 @@ class BlockchainEngine:
             value: msg.value untuk call(). Gunakan amount_in untuk native→token swap
                    agar router bisa wrap ETH→WETH secara internal.
         """
+        chain_id = self._chain_info()["chain_id"]
+        cache_key = (chain_id, token_in, token_out)
+        now = time.time()
+        cached = self._fee_cache.get(cache_key)
+        if cached and now - cached[1] < 3600:
+            best_fee = cached[0]
+            # Cache hanya menyimpan best_fee, bukan output.
+            # Output bergantung amount_in, jadi kita lakukan satu quote lagi
+            # untuk mendapatkan estimasi output yang akurat dengan amount saat ini.
+            try:
+                out = router_v3.functions.exactInputSingle((
+                    Web3.to_checksum_address(token_in),
+                    Web3.to_checksum_address(token_out),
+                    best_fee,
+                    Web3.to_checksum_address(sender),
+                    int(time.time()) + 600,
+                    amount_in,
+                    0,
+                    0,
+                )).call({"from": sender, "value": value})
+            except Exception:
+                # Jika cached fee tidak valid lagi, fallback ke full scan
+                cached = None
+            if cached is not None:
+                if out and out > 0:
+                    log_info(f"[CACHE HIT] fee={best_fee} key={cache_key}")
+                    return best_fee, out
+                # Jika quote 0, fallback ke full scan
+
         best_fee = V3_DEFAULT_FEE
         best_out = 0
         for _key, (fee, _label) in V3_FEE_TIERS.items():
@@ -1527,6 +1577,8 @@ class BlockchainEngine:
                     best_fee = fee
             except Exception:
                 continue
+        self._fee_cache[cache_key] = (best_fee, now)
+        log_info(f"[CACHE MISS] fee={best_fee} key={cache_key}")
         return best_fee, best_out
 
     def swap_native_to_token_v3(self, wallet, router_address, token_address, amount_ether, slippage=5, fee=None):
@@ -1623,7 +1675,10 @@ class BlockchainEngine:
                     int(time.time()) + 600, amount_raw, 0, 0,
                 )).call({"from": addr})
             except Exception as e:
-                raise ValueError(f"Quote V3 gagal: {e}")
+                raise ValueError(
+                    f"Quote V3 gagal (Token→Native) fee={fee}"
+                    f": {e}"
+                )
 
         min_out = int(est_out * (100 - slippage) / 100)
         deadline = int(time.time()) + 300
@@ -1631,7 +1686,7 @@ class BlockchainEngine:
         log_info(f"[V3] Menukar {amount} {symbol} → {info['symbol']} (fee={fee})")
         log_info(f"Estimasi: {self.w3.from_wei(est_out, 'ether')} {info['symbol']} | Min: {self.w3.from_wei(min_out, 'ether')}")
 
-        # Multicall: exactInputSingle (recipient=router) + unwrapWETH9 (kirim ke user)
+        # Multicall: exactInputSingle (recipient=router) + unwrapWETH9 (kirim ke user) + refundETH (bersih sisa WETH/ETH di router)
         swap_data = router_v3.functions.exactInputSingle((
             token_cs, weth_cs, fee, router_addr_cs, deadline, amount_raw, min_out, 0,
         ))._encode_transaction_data()
@@ -1640,8 +1695,10 @@ class BlockchainEngine:
             min_out, addr
         )._encode_transaction_data()
 
+        cleanup_data = router_v3.functions.refundETH()._encode_transaction_data()
+
         # Encode via multicall (auto-detect SwapRouter vs SwapRouter02)
-        tx = self._multicall_v3(router_v3, deadline, [swap_data, unwrap_data], addr)
+        tx = self._multicall_v3(router_v3, deadline, [swap_data, unwrap_data, cleanup_data], addr)
         tx["_type"] = "swap_v3_token_ke_native"
         return self._build_and_send(tx, wallet["private_key"], wallet["address"])
 
@@ -1679,7 +1736,10 @@ class BlockchainEngine:
                     int(time.time()) + 600, amount_raw, 0, 0,
                 )).call({"from": addr})
             except Exception as e:
-                raise ValueError(f"Quote V3 gagal: {e}")
+                raise ValueError(
+                    f"Quote V3 gagal (Token→Token) fee={fee}"
+                    f": {e}"
+                )
 
         min_out = int(est_out * (100 - slippage) / 100)
         deadline = int(time.time()) + 300
@@ -1751,1258 +1811,214 @@ class BlockchainEngine:
         }
         return self._build_and_send(tx, wallet["private_key"], wallet["address"])
 
-
-# ═══════════════════════════════════════════════════════════════
-# PENJADWAL TUGAS
-# ═══════════════════════════════════════════════════════════════
-
-class Scheduler:
-    """Penjadwal tugas latar belakang untuk transaksi berulang.
-
-    Saat berjalan, output disimpan ke buffer agar tidak mengganggu
-    menu interaktif. Pengguna bisa lihat log via 'Lihat Log Jadwal'.
-    """
-
-    def __init__(self):
-        self.tasks: list[dict] = []
-        self._running = False
-        self._thread: threading.Thread | None = None
-        self._log: list[str] = []
-        self._log_lock = threading.Lock()
-        self._total_runs = 0
-        self._total_ok = 0
-        self._total_err = 0
-
-    def add(self, name, func, interval_sec, *args, **kwargs):
-        self.tasks.append({
-            "name": name,
-            "func": func,
-            "interval": interval_sec,
-            "args": args,
-            "kwargs": kwargs,
-            "next_run": time.time(),
-            "active": True,
-            "runs": 0,
-            "errors": 0,
-        })
-        log_ok(f"Dijadwalkan: '{name}' setiap {interval_sec} detik")
-
-    def remove(self, index):
-        if 0 <= index < len(self.tasks):
-            t = self.tasks.pop(index)
-            log_ok(f"Dihapus: '{t['name']}'")
-
-    @property
-    def is_running(self):
-        return self._running
-
-    def status_line(self):
-        """Status satu baris untuk ditampilkan di menu utama."""
-        if not self._running:
-            return None
-        active = sum(1 for t in self.tasks if t["active"])
-        next_t = ""
-        soonest = None
+    def _request_faucet(self, chain_name: str, address: str) -> bool:
+        """Attempt to get funds from a faucet for the given address on the given chain.
+        
+        REALITA 2025: Semua faucet public testnet butuh captcha/login/API key.
+        Fungsi ini akan:
+        1. Coba berbagai faucet API (kemungkinan besar gagal karena captcha)
+        2. Generate manual claim links untuk user
+        3. Return False jika semua gagal (caller harus handle gracefully)
+        """
+        # Faucet configurations + manual claim links
+        FAUCETS = {
+            "Sepolia": {
+                "manual_links": [
+                    "https://cloud.google.com/application/web3/faucet/ethereum/sepolia",
+                    "https://www.alchemy.com/faucets/ethereum-sepolia",
+                    "https://faucets.chain.link/sepolia",
+                    "https://faucet.quicknode.com/ethereum/sepolia",
+                ],
+                "api_endpoints": [
+                    # Tidak ada API publik yang work tanpa captcha di 2025
+                ]
+            },
+            "Base Sepolia": {
+                "manual_links": [
+                    "https://www.coinbase.com/developer-platform/products/faucet",
+                    "https://www.alchemy.com/faucets/base-sepolia",
+                    "https://faucet.quicknode.com/base/sepolia",
+                ],
+                "api_endpoints": []
+            },
+            "Polygon Amoy": {
+                "manual_links": [
+                    "https://faucet.polygon.technology/",
+                    "https://www.alchemy.com/faucets/polygon-amoy",
+                ],
+                "api_endpoints": []
+            },
+            "Arbitrum Sepolia": {
+                "manual_links": [
+                    "https://www.alchemy.com/faucets/arbitrum-sepolia",
+                    "https://faucet.quicknode.com/arbitrum/sepolia",
+                ],
+                "api_endpoints": []
+            },
+            "Optimism Sepolia": {
+                "manual_links": [
+                    "https://www.alchemy.com/faucets/optimism-sepolia",
+                    "https://faucet.quicknode.com/optimism/sepolia",
+                ],
+                "api_endpoints": []
+            },
+        }
+        
+        if chain_name not in FAUCETS:
+            log_warn(f"No faucet configured for {chain_name}")
+            return False
+        
+        faucet_config = FAUCETS[chain_name]
+        api_endpoints = faucet_config.get("api_endpoints", [])
+        manual_links = faucet_config.get("manual_links", [])
+        
+        # Rate limiting: wait at least 60 seconds between requests per address/chain
         now = time.time()
-        for t in self.tasks:
-            if t["active"]:
-                remaining = max(0, t["next_run"] - now)
-                if soonest is None or remaining < soonest:
-                    soonest = remaining
-                    next_t = t["name"]
-        if soonest is not None:
-            m, s = divmod(int(soonest), 60)
-            h, m = divmod(m, 60)
-            if h > 0:
-                eta = f"{h}j{m:02d}m"
-            elif m > 0:
-                eta = f"{m}m{s:02d}d"
-            else:
-                eta = f"{s}d"
-            return f"⏰ Jadwal: {C.G}BERJALAN{C.END} — {active} tugas — selanjutnya '{next_t}' dalam {eta} — ✅{self._total_ok} ❌{self._total_err}"
-        return f"⏰ Jadwal: {C.G}BERJALAN{C.END} — {active} tugas"
-
-    def start(self):
-        if not self.tasks:
-            log_warn("Tidak ada tugas untuk dijalankan")
-            return
-        if self._running:
-            log_warn("Penjadwal sudah berjalan")
-            return
-        self._running = True
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-        log_ok("Penjadwal dimulai di latar belakang")
-        log_info("Kamu bisa kembali ke Menu Utama dan tetap pakai bot!")
-        log_info("Output jadwal tersimpan — lihat via 'Lihat Log Jadwal'")
-
-    def stop(self):
-        self._running = False
-        log_ok("Penjadwal dihentikan")
-
-    def show(self):
-        if not self.tasks:
-            log_info("Tidak ada tugas terjadwal")
-            return
-        now = time.time()
-        print(f"\n  {C.BOLD}Tugas Terjadwal:{C.END}")
-        if self._running:
-            print(f"  {C.G}● BERJALAN{C.END}  (eksekusi: {self._total_runs} | berhasil: {self._total_ok} | gagal: {self._total_err})")
-        for i, t in enumerate(self.tasks):
-            st = f"{C.G}aktif{C.END}" if t["active"] else f"{C.R}dijeda{C.END}"
-            remaining = max(0, t["next_run"] - now) if self._running else 0
-            m, s = divmod(int(remaining), 60)
-            h, m = divmod(m, 60)
-            if self._running and t["active"]:
-                if h > 0:
-                    eta = f" — berikutnya {h}j{m:02d}m{s:02d}d"
+        last = self._faucet_last_request.get((chain_name, address), 0)
+        if now - last < 60:
+            wait = int(60 - (now - last))
+            log_info(f"Faucet rate limiting: menunggu {wait} detik sebelum request ulang")
+            time.sleep(wait)
+        
+        # Try API endpoints first
+        for endpoint in api_endpoints:
+            endpoint_name = endpoint.get("name", "Unknown")
+            url = endpoint["url"]
+            method = endpoint.get("method", "GET").upper()
+            headers = endpoint.get("headers", {})
+            data_func = endpoint.get("data")
+            data = data_func(address) if data_func else None
+            
+            log_info(f"Trying {endpoint_name} faucet for {chain_name}...")
+            
+            try:
+                if requests is not None:
+                    if method == "POST":
+                        resp = requests.post(url, json=data, headers=headers, timeout=30)
+                    else:
+                        resp = requests.get(url, params=data, headers=headers, timeout=30)
+                    
+                    # Success - verify it's actually JSON response, not HTML
+                    if resp.status_code in (200, 201, 202):
+                        # Check if response is JSON (not HTML page)
+                        if 'application/json' in resp.headers.get('Content-Type', ''):
+                            log_ok(f"✅ Faucet request successful via {endpoint_name} for {address} on {chain_name}")
+                            self._faucet_last_request[(chain_name, address)] = time.time()
+                            return True
+                        else:
+                            log_warn(f"⚠️  {endpoint_name} returned HTML (captcha/login required)")
+                            continue
+                    
+                    # Captcha/Cloudflare detected
+                    elif resp.status_code in (403, 405):
+                        log_warn(f"⚠️  {endpoint_name} blocked (captcha/cloudflare): {resp.status_code}")
+                        continue
+                    
+                    # Other error
+                    else:
+                        log_err(f"❌ {endpoint_name} failed: {resp.status_code}")
+                        continue
+                
                 else:
-                    eta = f" — berikutnya {m}m{s:02d}d"
-            else:
-                eta = ""
-            print(f"    {i+1}. {t['name']} — setiap {t['interval']}d — {st} — jalan: {t['runs']}x{eta}")
-
-    def show_log(self, n=30):
-        """Tampilkan N entri terakhir log penjadwal."""
-        with self._log_lock:
-            entries = list(self._log[-n:])
-        if not entries:
-            log_info("Log penjadwal kosong")
-            return
-        print(f"\n  {C.BOLD}📋 Log Penjadwal ({len(entries)} entri terakhir):{C.END}")
-        print(f"  {C.DIM}{'─' * 55}{C.END}")
-        for line in entries:
-            print(f"  {line}")
-        print(f"  {C.DIM}{'─' * 55}{C.END}")
-
-    def _bg_log(self, msg, color=C.CY):
-        """Simpan ke buffer alih-alih print (untuk thread latar belakang)."""
-        ts = datetime.now().strftime("%H:%M:%S")
-        line = f"{C.DIM}[{ts}]{C.END} {color}{msg}{C.END}"
-        with self._log_lock:
-            self._log.append(line)
-            if len(self._log) > 200:
-                self._log = self._log[-200:]
-
-    def _loop(self):
-        """Loop latar belakang — semua output ke buffer, bukan stdout."""
-        while self._running:
-            now = time.time()
-            for t in self.tasks:
-                if t["active"] and now >= t["next_run"]:
-                    self._bg_log(f"▶ Menjalankan: {t['name']}")
-                    self._total_runs += 1
+                    # Fallback to urllib
+                    import urllib.request
+                    import urllib.error
+                    
+                    data_encoded = None
+                    if data is not None and method == "POST":
+                        data_encoded = json.dumps(data).encode("utf-8")
+                    elif data is not None and method == "GET":
+                        log_warn("GET with data not supported in fallback")
+                        continue
+                    
+                    req = urllib.request.Request(url, data=data_encoded, headers=headers, method=method)
                     try:
-                        import io
-                        old_stdout = sys.stdout
-                        capture = io.StringIO()
-                        sys.stdout = capture
-                        try:
-                            t["func"](*t["args"], **t["kwargs"])
-                        finally:
-                            sys.stdout = old_stdout
-                        output = capture.getvalue().strip()
-                        if output:
-                            for line in output.split("\n")[-10:]:
-                                self._bg_log(f"  {line.strip()}", C.DIM)
-                        t["runs"] += 1
-                        self._total_ok += 1
-                        self._bg_log(f"✅ Selesai: {t['name']} (jalan ke-{t['runs']})", C.G)
+                        with urllib.request.urlopen(req, timeout=30) as resp:
+                            if 200 <= resp.status < 300:
+                                content_type = resp.headers.get('Content-Type', '')
+                                if 'application/json' in content_type:
+                                    log_ok(f"✅ Faucet request successful via {endpoint_name} for {address} on {chain_name}")
+                                    self._faucet_last_request[(chain_name, address)] = time.time()
+                                    return True
+                                else:
+                                    log_warn(f"⚠️  {endpoint_name} returned HTML (captcha/login required)")
+                                    continue
+                    except urllib.error.HTTPError as e:
+                        log_err(f"❌ {endpoint_name} failed: {e.code}")
+                        continue
                     except Exception as e:
-                        sys.stdout = old_stdout if 'old_stdout' in dir() else sys.__stdout__
-                        t["errors"] += 1
-                        self._total_err += 1
-                        self._bg_log(f"❌ Gagal: {t['name']}: {e}", C.R)
-                    t["next_run"] = now + t["interval"]
-            time.sleep(1)
-
-
-# ═══════════════════════════════════════════════════════════════
-# CLI INTERAKTIF
-# ═══════════════════════════════════════════════════════════════
-
-class CLI:
-    """Antarmuka baris perintah interaktif."""
-
-    def __init__(self):
-        self.config = Config()
-        self.engine = BlockchainEngine(self.config)
-        self.scheduler = Scheduler()
-
-    # ── Loop Utama ──────────────────────────────────────────────
-
-    def run(self):
-        clear_screen()
-        banner()
-
-        while True:
-            if self.scheduler.is_running:
-                print(f"\n  {self.scheduler.status_line()}")
-            choice = menu_select("MENU UTAMA", [
-                ("1", "⚙️  Pengaturan & Konfigurasi"),
-                ("2", "💸 Kirim Token Native"),
-                ("3", "📤 Multi-Kirim (Batch)"),
-                ("4", "🎲 Kirim ke Alamat Acak"),
-                ("5", "🔄 Swap Token (DEX)"),
-                ("6", "🌉 Bridge Token"),
-                ("7", "⏰ Tugas Terjadwal"),
-                ("8", "💰 Cek Saldo"),
-                ("9", "📜 Riwayat Transaksi"),
-                ("0", "🚪 Keluar"),
-            ])
-
-            try:
-                actions = {
-                    "1": self._menu_setup,
-                    "2": self._menu_send,
-                    "3": self._menu_multi_send,
-                    "4": self._menu_send_random,
-                    "5": self._menu_swap,
-                    "6": self._menu_bridge,
-                    "7": self._menu_scheduler,
-                    "8": self._menu_balances,
-                    "9": self._menu_history,
-                }
-                if choice == "0":
-                    self.scheduler.stop()
-                    log_info("Sampai jumpa! 👋")
-                    break
-                elif choice in actions:
-                    actions[choice]()
-            except KeyboardInterrupt:
-                print()
-                log_warn("Terganggu — kembali ke menu")
-            except Exception as e:
-                log_err(f"Error: {e}")
-                if os.environ.get("DEBUG"):
-                    traceback.print_exc()
-
-    # ── Pemilih Umum ────────────────────────────────────────────
-
-    def _pick_chain_name(self, label="Pilih Chain", filter_type=None):
-        """Tampilkan daftar chain bernomor dan kembalikan nama chain yang dipilih (tanpa koneksi)."""
-        chains = self.config.get_chains()
-        if filter_type:
-            chains = {n: c for n, c in chains.items() if c.get("type") == filter_type}
-        if not chains:
-            log_warn("Tidak ada chain tersedia.")
-            return None
-
-        # Urutkan: mainnet dulu, lalu testnet, lalu alphabetical
-        sorted_chains = sorted(chains.items(), key=lambda x: (0 if x[1].get("type") == "mainnet" else 1, x[0].lower()))
-
-        keyword = prompt(f"{label} — ketik kata kunci untuk filter (atau Enter untuk lihat semua)", "")
-        if keyword:
-            sorted_chains = [(n, c) for n, c in sorted_chains
-                             if keyword.lower() in n.lower() or keyword.lower() in c["symbol"].lower()]
-            if not sorted_chains:
-                log_err(f"Tidak ditemukan chain dengan kata kunci '{keyword}'")
-                return None
-
-        print(f"\n  {C.BOLD}{label}:{C.END}")
-        for i, (name, c) in enumerate(sorted_chains, 1):
-            tag = f"{C.G}mainnet{C.END}" if c.get("type") == "mainnet" else f"{C.Y}testnet{C.END}"
-            print(f"    {C.BOLD}{i:3}.{C.END} {C.CY}{name}{C.END} ({c['symbol']}) — {tag}")
-        print()
-
-        try:
-            idx = int(prompt("Ketik nomor")) - 1
-            if 0 <= idx < len(sorted_chains):
-                return sorted_chains[idx][0]
-            else:
-                log_err("Nomor tidak valid")
-                return None
-        except ValueError:
-            log_err("Masukkan angka yang valid")
-            return None
-
-    def _select_chain(self):
-        chains = self.config.get_chains()
-        if not chains:
-            log_warn("Belum ada chain! Masuk ke Pengaturan → Tambah Chain dulu.")
-            return None
-
-        choice = menu_select("Pilih Chain", [
-            ("1", "🌐 Lihat Mainnet"),
-            ("2", "🧪 Lihat Testnet"),
-            ("3", "📋 Lihat Semua"),
-            ("4", "🔍 Cari Chain"),
-        ])
-
-        if choice == "1":
-            self._print_chains(filter_type="mainnet")
-        elif choice == "2":
-            self._print_chains(filter_type="testnet")
-        elif choice == "3":
-            self._print_chains()
-        elif choice == "4":
-            keyword = prompt("Kata kunci (nama/simbol)").lower()
-            matches = {n: c for n, c in chains.items()
-                       if keyword in n.lower() or keyword in c["symbol"].lower()}
-            if not matches:
-                log_err(f"Tidak ditemukan chain dengan kata kunci '{keyword}'")
-                return None
-            self._print_chains(custom=matches)
-        else:
-            self._print_chains()
-
-        name = prompt("Ketik nama chain")
-        if name not in chains:
-            # Coba cari case-insensitive
-            for cn in chains:
-                if cn.lower() == name.lower():
-                    name = cn
-                    break
-            else:
-                log_err(f"Chain '{name}' tidak ditemukan")
-                return None
-        if not self.engine.connect(name):
-            return None
-        return name
-
-    def _select_wallet(self, allow_multi=False):
-        wallets = self.config.get_wallets()
-        if not wallets:
-            log_warn("Belum ada wallet! Masuk ke Pengaturan → Tambah Wallet dulu.")
-            return None
-        self._print_wallets()
-        if allow_multi:
-            choice = prompt("Pilih wallet (nomor, 'all', atau 'random')")
-            if choice.lower() == "all":
-                return wallets, "round-robin"
-            elif choice.lower() == "random":
-                return wallets, "random"
-            idx = int(choice) - 1
-            return [wallets[idx]], "single"
-        else:
-            idx = int(prompt("Pilih nomor wallet")) - 1
-            return wallets[idx]
-
-    def _select_amount(self):
-        choice = menu_select("Jumlah (token native)", [
-            ("1", "0.1"),
-            ("2", "0.001"),
-            ("3", "0.0001"),
-            ("4", "Kustom"),
-        ])
-        if choice in VALUE_PRESETS:
-            return VALUE_PRESETS[choice]
-        elif choice == "4":
-            return prompt("Masukkan jumlah")
-        return None
-
-    # ── Printer ─────────────────────────────────────────────────
-
-    def _print_chains(self, filter_type=None, custom=None):
-        chains = custom if custom else self.config.get_chains()
-        if filter_type:
-            chains = {n: c for n, c in chains.items() if c.get("type") == filter_type}
-
-        mainnets = {n: c for n, c in chains.items() if c.get("type") == "mainnet"}
-        testnets = {n: c for n, c in chains.items() if c.get("type") == "testnet"}
-
-        def _print_group(label, group):
-            if not group:
-                return
-            print(f"\n  {C.BOLD}{label} ({len(group)}):{C.END}")
-            for name, c in sorted(group.items()):
-                print(f"    • {C.CY}{name}{C.END} ({c['symbol']}) — ID {c['chain_id']}")
-
-        if mainnets:
-            _print_group("🌐 Mainnet", mainnets)
-        if testnets:
-            _print_group("🧪 Testnet", testnets)
-        print()
-
-    def _print_wallets(self):
-        wallets = self.config.get_wallets()
-        print(f"\n  {C.BOLD}Daftar Wallet:{C.END}")
-        for i, w in enumerate(wallets, 1):
-            print(f"    {i}. {C.CY}{w['name']}{C.END} — {short_addr(w['address'])}")
-
-    # ── Menu Pengaturan ─────────────────────────────────────────
-
-    def _menu_setup(self):
-        while True:
-            choice = menu_select("⚙️  PENGATURAN", [
-                ("1", "Tambah Chain (RPC)"),
-                ("2", "Tambah Wallet"),
-                ("3", "Tambah DEX Router"),
-                ("4", "Tambah Token"),
-                ("5", "Tambah Kontrak Bridge"),
-                ("6", "Lihat Semua Konfigurasi"),
-                ("7", "🗑 Hapus Konfigurasi"),
-                ("0", "← Kembali"),
-            ])
-            if choice == "0":
-                break
-
-            elif choice == "1":
-                sub = menu_select("Tambah Chain", [
-                    ("1", "🔍 Masukkan RPC (auto-deteksi)"),
-                    ("2", "✏️  Masukkan manual (chain kustom)"),
-                    ("3", "🔄 Ganti RPC chain yang sudah ada"),
-                ])
-                if sub == "1":
-                    rpc = prompt("URL RPC")
-                    if not rpc:
+                        log_err(f"❌ {endpoint_name} error: {e}")
                         continue
-                    log_info("Mendeteksi chain...")
-                    detected = detect_chain(rpc)
-                    if detected:
-                        cid, d_name, d_symbol, d_explorer, d_net = detected
-                        log_ok(f"Terdeteksi: {d_name} (Chain ID: {cid}, {d_symbol}, {d_net})")
-                        name     = prompt("Nama chain", d_name)
-                        chain_id = prompt("Chain ID", str(cid))
-                        symbol   = prompt("Simbol native", d_symbol)
-                        explorer = prompt("URL Explorer", d_explorer)
-                        net_type = prompt("Tipe (mainnet/testnet)", d_net)
-                    else:
-                        log_warn("Tidak bisa deteksi otomatis. Masukkan manual:")
-                        name     = prompt("Nama chain (misal: ethereum, bsc-testnet)")
-                        chain_id = prompt("Chain ID (misal: 1, 56, 421614)")
-                        symbol   = prompt("Simbol native (misal: ETH, BNB)")
-                        explorer = prompt("URL Explorer (opsional)", "")
-                        net_type = prompt("Tipe (mainnet/testnet)", "mainnet")
-                    self.config.add_chain(name, rpc, chain_id, symbol, explorer, net_type)
-                    log_ok(f"Chain '{name}' berhasil ditambahkan!")
-                elif sub == "2":
-                    name     = prompt("Nama chain")
-                    rpc      = prompt("URL RPC")
-                    chain_id = prompt("Chain ID")
-                    symbol   = prompt("Simbol native")
-                    explorer = prompt("URL Explorer (opsional)", "")
-                    net_type = prompt("Tipe (mainnet/testnet)", "mainnet")
-                    self.config.add_chain(name, rpc, chain_id, symbol, explorer, net_type)
-                    log_ok(f"Chain '{name}' berhasil ditambahkan!")
-                elif sub == "3":
-                    self._print_chains()
-                    name = prompt("Nama chain yang mau diganti RPC-nya")
-                    chains = self.config.get_chains()
-                    matched = None
-                    for cn in chains:
-                        if cn.lower() == name.lower():
-                            matched = cn
-                            break
-                    if not matched:
-                        log_err(f"Chain '{name}' tidak ditemukan")
-                        continue
-                    old_rpc = chains[matched].get("rpc", "?")
-                    log_info(f"RPC saat ini: {old_rpc}")
-                    new_rpc = prompt("RPC baru")
-                    if new_rpc:
-                        c = chains[matched]
-                        self.config.add_chain(matched, new_rpc, c["chain_id"], c["symbol"], c.get("explorer",""), c.get("type","mainnet"))
-                        log_ok(f"RPC untuk '{matched}' berhasil diganti!")
-
-            elif choice == "2":
-                label   = prompt("Label wallet (misal: utama, hot1)")
-                address = prompt("Alamat (0x…)")
-                pk      = prompt("Private key")
-                try:
-                    self.config.add_wallet(label, address, pk)
-                    log_ok(f"Wallet '{label}' berhasil ditambahkan!")
-                except Exception as e:
-                    log_err(f"Wallet tidak valid: {e}")
-
-            elif choice == "3":
-                if not self.config.get_chains():
-                    log_warn("Tambah chain dulu!"); continue
-                log_info("Pilih chain untuk DEX Router:")
-                chain = self._pick_chain_name("Chain")
-                if not chain:
-                    continue
-                # Cek apakah ada DEX yang dikenali untuk chain ini
-                known = KNOWN_DEX_ROUTERS.get(chain, [])
-                if known:
-                    print(f"\n  {C.BOLD}DEX yang dikenali untuk {C.CY}{chain}{C.END}{C.BOLD}:{C.END}")
-                    for i, entry in enumerate(known, 1):
-                        dname, daddr = entry[0], entry[1]
-                        dtype = entry[3] if len(entry) > 3 else "v2"
-                        tag = f" {C.M}[{dtype.upper()}]{C.END}" if dtype == "v3" else ""
-                        print(f"    {C.BOLD}{i}.{C.END} {C.CY}{dname}{C.END}{tag} — {short_addr(daddr)}")
-                    print(f"    {C.BOLD}{len(known)+1}.{C.END} {C.Y}✏️  Masukkan manual{C.END}")
-                    print()
-                    try:
-                        pick = int(prompt("Pilih nomor")) - 1
-                        if 0 <= pick < len(known):
-                            dname = known[pick][0]
-                            daddr = known[pick][1]
-                            dweth = known[pick][2]
-                            dtype = known[pick][3] if len(known[pick]) > 3 else "v2"
-                            self.config.add_dex_router(chain, dname, daddr, dweth, dtype)
-                            log_ok(f"DEX '{dname}' [{dtype.upper()}] ditambahkan di {chain}! (otomatis)")
-                            continue
-                    except ValueError:
-                        pass
-                # Manual input
-                name  = prompt("Nama DEX (misal: uniswap-v2, pancakeswap)")
-                addr  = prompt("Alamat kontrak router")
-                if not addr:
-                    log_err("Alamat kontrak router wajib diisi!"); continue
-                weth  = prompt("Alamat WETH (opsional, kosongkan untuk auto)", "")
-                rtype = menu_select("Tipe Router", [
-                    ("1", "V2 — Uniswap V2, PancakeSwap, SushiSwap, dll"),
-                    ("2", "V3 — Uniswap V3, PancakeSwap V3, dll"),
-                ])
-                rtype = "v3" if rtype == "2" else "v2"
-                self.config.add_dex_router(chain, name, addr, weth, rtype)
-                log_ok(f"DEX '{name}' [{rtype.upper()}] ditambahkan di {chain}!")
-
-            elif choice == "4":
-                if not self.config.get_chains():
-                    log_warn("Tambah chain dulu!"); continue
-                log_info("Pilih chain untuk Token:")
-                chain = self._pick_chain_name("Chain")
-                if not chain:
-                    continue
-                # Cek apakah ada token yang dikenali untuk chain ini
-                known_t = KNOWN_TOKENS.get(chain, [])
-                if known_t:
-                    print(f"\n  {C.BOLD}Token yang dikenali untuk {C.CY}{chain}{C.END}{C.BOLD}:{C.END}")
-                    for i, (tsym, taddr, tdec) in enumerate(known_t, 1):
-                        print(f"    {C.BOLD}{i}.{C.END} {C.CY}{tsym}{C.END} — {short_addr(taddr)} ({tdec}d)")
-                    print(f"    {C.BOLD}{len(known_t)+1}.{C.END} {C.Y}✏️  Masukkan manual{C.END}")
-                    print()
-                    try:
-                        pick = int(prompt("Pilih nomor")) - 1
-                        if 0 <= pick < len(known_t):
-                            tsym, taddr, tdec = known_t[pick]
-                            self.config.add_token(chain, tsym, taddr, tdec)
-                            log_ok(f"Token '{tsym}' ditambahkan di {chain}! (otomatis)")
-                            continue
-                    except ValueError:
-                        pass
-                # Manual input
-                sym   = prompt("Simbol token (misal: USDC)")
-                addr  = prompt("Alamat kontrak token")
-                if not addr:
-                    log_err("Alamat kontrak token wajib diisi!"); continue
-                dec   = prompt("Desimal", "18")
-                self.config.add_token(chain, sym, addr, dec)
-                log_ok(f"Token '{sym}' ditambahkan di {chain}!")
-
-            elif choice == "5":
-                self._setup_bridge()
-
-            elif choice == "6":
-                self._print_full_config()
-
-            elif choice == "7":
-                self._menu_delete()
-
-    def _print_full_config(self):
-        print(f"\n  {'═' * 55}")
-        self._print_chains()
-        self._print_wallets()
-        routers = self.config.data.get("dex_routers", {})
-        if routers:
-            print(f"\n  {C.BOLD}DEX Router:{C.END}")
-            for ch, dexes in routers.items():
-                for nm, info in dexes.items():
-                    rtype = info.get("type", "v2").upper()
-                    print(f"    • {C.CY}{ch}/{nm}{C.END} [{rtype}] — {short_addr(info['address'])}")
-        tokens = self.config.data.get("tokens", {})
-        if tokens:
-            print(f"\n  {C.BOLD}Token:{C.END}")
-            for ch, toks in tokens.items():
-                for sym, info in toks.items():
-                    print(f"    • {C.CY}{ch}/{sym}{C.END} — {short_addr(info['address'])} ({info['decimals']}d)")
-        bridges = self.config.get_bridges()
-        if bridges:
-            print(f"\n  {C.BOLD}Bridge:{C.END}")
-            for nm, info in bridges.items():
-                contract_str = short_addr(info['contract']) if info.get('contract') else "(belum ada kontrak)"
-                print(f"    • {C.CY}{nm}{C.END} — {info['from_chain']} → {info['to_chain']} — {contract_str}")
-        print(f"  {'═' * 55}")
-
-    # ── Setup Bridge (auto-detect + manual) ──────────────────────
-
-    def _setup_bridge(self):
-        """Setup bridge baru — otomatis deteksi rute yang dikenali, atau manual."""
-        log_info("Pilih chain asal:")
-        cfrom = self._pick_chain_name("Chain Asal")
-        if not cfrom:
-            return
-        log_info("Pilih chain tujuan:")
-        cto = self._pick_chain_name("Chain Tujuan")
-        if not cto:
-            return
-
-        route_key = (cfrom, cto)
-        known = KNOWN_BRIDGE_ROUTES.get(route_key, [])
-
-        if known:
-            print(f"\n  {C.BOLD}Bridge yang dikenali untuk {C.CY}{cfrom} → {cto}{C.END}{C.BOLD}:{C.END}")
-            for i, (pname, paddr, ptype) in enumerate(known, 1):
-                type_label = {
-                    "op-l1-deposit": "OP Stack (L1→L2)",
-                    "op-l2-withdraw": "OP Stack (L2→L1)",
-                    "arb-l1-deposit": "Arbitrum (L1→L2)",
-                }.get(ptype, ptype)
-                print(f"    {C.BOLD}{i}.{C.END} {C.CY}{pname}{C.END}")
-                print(f"       Kontrak: {short_addr(paddr)} | Tipe: {type_label}")
-            print(f"    {C.BOLD}{len(known)+1}.{C.END} {C.Y}✏️  Setup manual{C.END}")
-            print()
-
-            try:
-                pick = int(prompt("Pilih nomor")) - 1
-                if 0 <= pick < len(known):
-                    pname, paddr, ptype = known[pick]
-                    bname = f"{cfrom.lower()}-{cto.lower()}".replace(" ", "-")
-                    self.config.add_bridge(bname, cfrom, cto, paddr, ptype)
-                    log_ok(f"Bridge '{bname}' ditambahkan! ({cfrom} → {cto})")
-                    log_ok(f"Kontrak & ABI otomatis: {pname} [{ptype}]")
-                    return
-            except ValueError:
-                pass
-
-        # Manual setup
-        if not known:
-            log_info(f"Tidak ada bridge yang dikenali untuk {cfrom} → {cto}")
-        name = prompt("Nama bridge (misal: stargate, hop, custom)")
-        addr = prompt("Alamat kontrak bridge (kosongkan jika belum tahu)", "")
-        self.config.add_bridge(name, cfrom, cto, addr, "generic")
-        log_ok(f"Bridge '{name}' berhasil ditambahkan! ({cfrom} → {cto})")
-        if not addr:
-            log_warn("Kontrak belum diisi — nanti diminta saat eksekusi bridge")
-
-    # ── Hapus Konfigurasi ────────────────────────────────────────
-
-    def _menu_delete(self):
-        while True:
-            choice = menu_select("🗑 HAPUS KONFIGURASI", [
-                ("1", "Hapus Chain"),
-                ("2", "Hapus Wallet"),
-                ("3", "Hapus Bridge"),
-                ("4", "Hapus DEX Router"),
-                ("5", "Hapus Token"),
-                ("0", "← Kembali"),
-            ])
-            if choice == "0":
-                break
-
-            elif choice == "1":
-                chains = self.config.get_chains()
-                if not chains:
-                    log_warn("Tidak ada chain."); continue
-                self._print_chains()
-                n = prompt("Nama chain yang dihapus")
-                # Case-insensitive
-                for cn in chains:
-                    if cn.lower() == n.lower():
-                        n = cn; break
-                if n not in chains:
-                    log_err(f"Chain '{n}' tidak ditemukan"); continue
-                if confirm(f"Yakin hapus chain '{n}'?"):
-                    self.config.remove_chain(n)
-                    log_ok(f"Chain '{n}' berhasil dihapus!")
-
-            elif choice == "2":
-                wallets = self.config.get_wallets()
-                if not wallets:
-                    log_warn("Tidak ada wallet."); continue
-                self._print_wallets()
-                try:
-                    idx = int(prompt("Nomor wallet yang dihapus")) - 1
-                    if 0 <= idx < len(wallets):
-                        wname = wallets[idx]['name']
-                        if confirm(f"Yakin hapus wallet '{wname}'?"):
-                            self.config.remove_wallet(idx)
-                            log_ok(f"Wallet '{wname}' berhasil dihapus!")
-                    else:
-                        log_err("Nomor tidak valid")
-                except ValueError:
-                    log_err("Masukkan angka")
-
-            elif choice == "3":
-                bridges = self.config.get_bridges()
-                if not bridges:
-                    log_warn("Tidak ada bridge."); continue
-                b_list = list(bridges.items())
-                print(f"\n  {C.BOLD}Daftar Bridge:{C.END}")
-                for i, (nm, info) in enumerate(b_list, 1):
-                    contract_str = short_addr(info['contract']) if info.get('contract') else "(tanpa kontrak)"
-                    print(f"    {i}. {C.CY}{nm}{C.END} — {info['from_chain']} → {info['to_chain']} — {contract_str}")
-                print()
-                try:
-                    idx = int(prompt("Nomor bridge yang dihapus")) - 1
-                    if 0 <= idx < len(b_list):
-                        bname = b_list[idx][0]
-                        if confirm(f"Yakin hapus bridge '{bname}'?"):
-                            self.config.remove_bridge(bname)
-                            log_ok(f"Bridge '{bname}' berhasil dihapus!")
-                    else:
-                        log_err("Nomor tidak valid")
-                except ValueError:
-                    log_err("Masukkan angka")
-
-            elif choice == "4":
-                routers = self.config.data.get("dex_routers", {})
-                if not routers:
-                    log_warn("Tidak ada DEX router."); continue
-                r_list = []
-                print(f"\n  {C.BOLD}DEX Router:{C.END}")
-                num = 1
-                for ch, dexes in routers.items():
-                    for nm, info in dexes.items():
-                        r_list.append((ch, nm))
-                        print(f"    {num}. {C.CY}{ch}/{nm}{C.END} — {short_addr(info['address'])}")
-                        num += 1
-                print()
-                try:
-                    idx = int(prompt("Nomor DEX router yang dihapus")) - 1
-                    if 0 <= idx < len(r_list):
-                        ch, nm = r_list[idx]
-                        if confirm(f"Yakin hapus DEX router '{ch}/{nm}'?"):
-                            self.config.remove_dex_router(ch, nm)
-                            log_ok(f"DEX router '{ch}/{nm}' berhasil dihapus!")
-                    else:
-                        log_err("Nomor tidak valid")
-                except ValueError:
-                    log_err("Masukkan angka")
-
-            elif choice == "5":
-                tokens = self.config.data.get("tokens", {})
-                if not tokens:
-                    log_warn("Tidak ada token."); continue
-                t_list = []
-                print(f"\n  {C.BOLD}Token:{C.END}")
-                num = 1
-                for ch, toks in tokens.items():
-                    for sym, info in toks.items():
-                        t_list.append((ch, sym))
-                        print(f"    {num}. {C.CY}{ch}/{sym}{C.END} — {short_addr(info['address'])} ({info['decimals']}d)")
-                        num += 1
-                print()
-                try:
-                    idx = int(prompt("Nomor token yang dihapus")) - 1
-                    if 0 <= idx < len(t_list):
-                        ch, sym = t_list[idx]
-                        if confirm(f"Yakin hapus token '{ch}/{sym}'?"):
-                            self.config.remove_token(ch, sym)
-                            log_ok(f"Token '{ch}/{sym}' berhasil dihapus!")
-                    else:
-                        log_err("Nomor tidak valid")
-                except ValueError:
-                    log_err("Masukkan angka")
-
-    # ── Kirim ───────────────────────────────────────────────────
-
-    def _menu_send(self):
-        chain = self._select_chain()
-        if not chain: return
-        wallet = self._select_wallet()
-        if not wallet: return
-        to = prompt("Alamat penerima (0x…)")
-        amount = self._select_amount()
-        if not amount: return
-
-        info = self.config.get_chains()[chain]
-        print(f"\n  {C.BOLD}Pratinjau Transaksi:{C.END}")
-        print(f"    Chain  : {C.CY}{chain}{C.END}")
-        print(f"    Dari   : {short_addr(wallet['address'])}")
-        print(f"    Ke     : {short_addr(to)}")
-        print(f"    Nilai  : {C.G}{amount} {info['symbol']}{C.END}")
-        if confirm("Konfirmasi & kirim?"):
-            self.engine.send_native(wallet, to, amount)
-
-    # ── Multi-Kirim ─────────────────────────────────────────────
-
-    def _menu_multi_send(self):
-        chain = self._select_chain()
-        if not chain: return
-        result = self._select_wallet(allow_multi=True)
-        if not result: return
-        wallets, mode = result
-
-        print(f"\n  {C.BOLD}Masukkan alamat penerima (baris kosong untuk selesai):{C.END}")
-        addresses = []
-        while True:
-            a = prompt(f"#{len(addresses)+1}")
-            if not a: break
-            addresses.append(a)
-        if not addresses:
-            log_warn("Tidak ada alamat yang dimasukkan"); return
-
-        amount = self._select_amount()
-        if not amount: return
-        delay = int(prompt("Jeda antar TX (detik)", "3"))
-
-        info = self.config.get_chains()[chain]
-        total = Decimal(amount) * len(addresses)
-        print(f"\n  {C.BOLD}Ringkasan Batch:{C.END}")
-        print(f"    Chain      : {C.CY}{chain}{C.END}")
-        print(f"    Wallet     : {len(wallets)} ({mode})")
-        print(f"    Penerima   : {len(addresses)}")
-        print(f"    Per-kirim  : {C.G}{amount} {info['symbol']}{C.END}")
-        print(f"    Total      : {C.G}{total} {info['symbol']}{C.END}")
-        print(f"    Jeda       : {delay} detik antar TX")
-
-        if confirm("Jalankan batch kirim?"):
-            results = self.engine.multi_send(wallets, addresses, amount, delay, mode)
-            ok = sum(1 for r in results if r["status"] == "sukses")
-            log_ok(f"Selesai: {ok}/{len(results)} berhasil")
-
-    # ── Kirim Acak ──────────────────────────────────────────────
-
-    def _menu_send_random(self):
-        chain = self._select_chain()
-        if not chain: return
-        result = self._select_wallet(allow_multi=True)
-        if not result: return
-        wallets, mode = result
-
-        count  = int(prompt("Jumlah alamat acak", "5"))
-        amount = self._select_amount()
-        if not amount: return
-        delay  = int(prompt("Jeda antar TX (detik)", "3"))
-
-        info = self.config.get_chains()[chain]
-        total = Decimal(amount) * count
-        print(f"\n  {C.BOLD}Ringkasan Kirim Acak:{C.END}")
-        print(f"    Chain      : {C.CY}{chain}{C.END}")
-        print(f"    Wallet     : {len(wallets)} ({mode})")
-        print(f"    Jumlah     : {count} alamat")
-        print(f"    Per-kirim  : {C.G}{amount} {info['symbol']}{C.END}")
-        print(f"    Total      : {C.G}{total} {info['symbol']}{C.END}")
-
-        if confirm("Jalankan kirim acak?"):
-            results = self.engine.send_to_random(wallets, count, amount, delay, mode)
-            ok = sum(1 for r in results if r["status"] == "sukses")
-            log_ok(f"Selesai: {ok}/{len(results)} berhasil")
-
-    # ── Swap ────────────────────────────────────────────────────
-
-    def _menu_swap(self):
-        chain = self._select_chain()
-        if not chain: return
-        routers = self.config.get_dex_routers(chain)
-        if not routers:
-            log_warn(f"Belum ada DEX router di {chain}. Tambahkan di Pengaturan."); return
-        wallet = self._select_wallet()
-        if not wallet: return
-
-        r_list = list(routers.items())
-        print(f"\n  {C.BOLD}DEX Router:{C.END}")
-        print(f"    {C.G}{C.BOLD}0. 🔍 Auto Best DEX (scan semua, pilih harga terbaik){C.END}")
-        for i, (n, info) in enumerate(r_list, 1):
-            rtype = self.engine._detect_router_type(n, info)
-            tag = f" {C.M}[{rtype.upper()}]{C.END}" if rtype == "v3" else ""
-            print(f"    {i}. {C.CY}{n}{C.END}{tag} — {short_addr(info['address'])}")
-        ri = int(prompt("Pilih router (0=auto)")) - 1
-        use_best_dex = (ri == -1)  # user chose 0
-
-        if use_best_dex:
-            rname, rinfo, router_type = None, None, None
-            log_info("🔍 Mode Auto Best DEX — akan scan semua DEX saat swap")
-        else:
-            rname, rinfo = r_list[ri]
-            router_type = self.engine._detect_router_type(rname, rinfo)
-            if router_type == "v3":
-                log_info(f"Router V3 terdeteksi — menggunakan Uniswap V3 swap")
-
-        stype = menu_select("Arah Swap", [
-            ("1", "Native → Token"),
-            ("2", "Token → Native"),
-            ("3", "Token → Token"),
-            ("4", "🔄 Wrap (Native → Wrapped)"),
-            ("5", "🔄 Unwrap (Wrapped → Native)"),
-            ("0", "← Kembali"),
-        ])
-        if stype == "0": return
-
-        if stype in ("4", "5"):
-            amount = self._select_amount()
-            if not amount: return
-            try:
-                if stype == "4":
-                    if confirm(f"Wrap {amount} native?"):
-                        self.engine.wrap_native(wallet, amount)
-                else:
-                    if confirm(f"Unwrap {amount} wrapped native?"):
-                        self.engine.unwrap_native(wallet, amount)
+            
             except Exception as e:
-                log_err(str(e))
-            return
+                log_err(f"❌ {endpoint_name} exception: {e}")
+                continue
+        
+        # No API endpoints or all failed - show manual claim links
+        if manual_links:
+            log_warn(f"⚠️  Auto-faucet tidak tersedia untuk {chain_name} (captcha/login required)")
+            log_info(f"💡 Manual claim untuk address {address}:")
+            for i, link in enumerate(manual_links, 1):
+                log_info(f"   {i}. {link}")
+        
+        return False
 
-        slippage = float(prompt("Slippage %", "5"))
-        tokens = self.config.get_tokens(chain)
-
-        # Pilih fee tier untuk V3 (skip jika Auto Best DEX)
-        v3_fee = None
-        if not use_best_dex and router_type == "v3":
-            fee_choice = menu_select("Fee Tier V3", [
-                ("0", "🔍 Auto-detect (cari terbaik)"),
-                ("1", "0.01% — stablecoin pairs"),
-                ("2", "0.05% — stablecoin/major pairs"),
-                ("3", "0.3%  — most pairs (default)"),
-                ("4", "1%    — exotic/volatile pairs"),
-            ])
-            if fee_choice in V3_FEE_TIERS:
-                v3_fee = V3_FEE_TIERS[fee_choice][0]
-            # fee_choice == "0" → v3_fee tetap None (auto-detect)
-
-        def pick_token(label="token"):
-            if tokens:
-                t_list = list(tokens.items())
-                print(f"\n  {C.BOLD}Token:{C.END}")
-                for i, (s, inf) in enumerate(t_list, 1):
-                    print(f"    {i}. {C.CY}{s}{C.END} — {short_addr(inf['address'])}")
-                print(f"    {len(t_list)+1}. Masukkan alamat manual")
-                c = int(prompt(f"Pilih {label}")) - 1
-                if c < len(t_list):
-                    return t_list[c][1]["address"]
-            return prompt(f"Alamat {label}")
-
+    def _ensure_minimum_balance(self, wallet, required_amount):
+        """Ensure wallet has minimum balance before transaction.
+        
+        Args:
+            wallet: Dict with 'address' key
+            required_amount: Amount needed for transaction (in ether)
+        
+        Returns:
+            True if balance sufficient or faucet succeeded, False otherwise
+        """
+        from decimal import Decimal
+        
+        address = wallet["address"]
+        min_balance = Decimal("0.001")  # Minimum balance threshold
+        
+        # Check current balance
         try:
-            if stype == "1":
-                token = pick_token("token yang dibeli")
-                amount = self._select_amount()
-                if not amount: return
-                if confirm(f"Swap {amount} native → token?"):
-                    if use_best_dex:
-                        self.engine.swap_best_dex(wallet, chain, token, amount, slippage, "native_to_token")
-                    elif router_type == "v3":
-                        self.engine.swap_native_to_token_v3(wallet, rinfo["address"], token, amount, slippage, v3_fee)
-                    else:
-                        self.engine.swap_native_to_token(wallet, rinfo["address"], token, amount, slippage)
-
-            elif stype == "2":
-                token = pick_token("token yang dijual")
-                amount = prompt("Jumlah yang dijual")
-                if confirm(f"Swap {amount} token → native?"):
-                    if use_best_dex:
-                        self.engine.swap_best_dex(wallet, chain, token, amount, slippage, "token_to_native")
-                    elif router_type == "v3":
-                        self.engine.swap_token_to_native_v3(wallet, rinfo["address"], token, amount, slippage, v3_fee)
-                    else:
-                        self.engine.swap_token_to_native(wallet, rinfo["address"], token, amount, slippage)
-
-            elif stype == "3":
-                t_in  = pick_token("token yang dijual")
-                t_out = pick_token("token yang dibeli")
-                amount = prompt("Jumlah yang dijual")
-                if confirm(f"Swap {amount} token → token?"):
-                    if use_best_dex:
-                        self.engine.swap_best_dex(wallet, chain, (t_in, t_out), amount, slippage, "token_to_token")
-                    elif router_type == "v3":
-                        self.engine.swap_token_to_token_v3(wallet, rinfo["address"], t_in, t_out, amount, slippage, v3_fee)
-                    else:
-                        self.engine.swap_token_to_token(wallet, rinfo["address"], t_in, t_out, amount, slippage)
+            balance_wei = self.w3.eth.get_balance(address)
+            balance_eth = Decimal(str(self.w3.from_wei(balance_wei, "ether")))
         except Exception as e:
-            log_err(str(e))
-
-    # ── Bridge ──────────────────────────────────────────────────
-
-    def _menu_bridge(self):
-        bridges = self.config.get_bridges()
-        if not bridges:
-            log_warn("Belum ada bridge. Mau setup bridge sekarang?")
-            if confirm("Setup bridge baru?"):
-                self._setup_bridge()
-                bridges = self.config.get_bridges()
-            if not bridges:
-                return
-
-        b_list = list(bridges.items())
-        print(f"\n  {C.BOLD}Daftar Bridge:{C.END}")
-        chains = self.config.get_chains()
-        for i, (n, info) in enumerate(b_list, 1):
-            src = info['from_chain']
-            dst = info['to_chain']
-            src_sym = chains.get(src, {}).get("symbol", "?")
-            dst_sym = chains.get(dst, {}).get("symbol", "?")
-            btype = info.get("bridge_type", "generic")
-            status = f"{C.G}✓ {btype}{C.END}" if info.get("contract") else f"{C.Y}tanpa kontrak{C.END}"
-            print(f"    {i}. {C.CY}{n}{C.END} — {src} ({src_sym}) → {dst} ({dst_sym}) [{status}]")
-        print()
-
-        try:
-            bi = int(prompt("Pilih bridge (nomor)")) - 1
-            if bi < 0 or bi >= len(b_list):
-                log_err("Nomor tidak valid"); return
-        except ValueError:
-            log_err("Masukkan angka"); return
-
-        bname, binfo = b_list[bi]
-        bridge_type = binfo.get("bridge_type", "generic")
-
-        # Cek apakah kontrak bridge ada
-        contract = binfo.get("contract", "")
-        if not contract:
-            log_warn(f"Bridge '{bname}' belum punya alamat kontrak!")
-            contract = prompt("Masukkan alamat kontrak bridge untuk melanjutkan", "")
-            if not contract:
-                log_err("Tidak bisa bridge tanpa alamat kontrak."); return
-            binfo["contract"] = Web3.to_checksum_address(contract.strip())
-            self.config.data["bridge_contracts"][bname] = binfo
-            self.config.save()
-            log_ok("Alamat kontrak disimpan!")
-
-        if not self.engine.connect(binfo["from_chain"]):
-            return
-        wallet = self._select_wallet()
-        if not wallet: return
-        amount = self._select_amount()
-        if not amount: return
-
-        # Ambil chain ID tujuan otomatis
-        dest = chains.get(binfo["to_chain"], {})
-        dest_id = binfo.get("dest_chain_id") or dest.get("chain_id")
-        if not dest_id:
-            dest_id = prompt("Chain ID tujuan (tidak terdeteksi otomatis)")
-
-        src_sym = chains.get(binfo["from_chain"], {}).get("symbol", "?")
-        type_label = {
-            "op-l1-deposit": "OP Stack (L1→L2) — depositETHTo",
-            "op-l2-withdraw": "OP Stack (L2→L1) — bridgeETHTo",
-            "arb-l1-deposit": "Arbitrum (L1→L2) — depositEth",
-            "generic": "Generik — bridge(uint256,address)",
-        }.get(bridge_type, bridge_type)
-
-        print(f"\n  {C.BOLD}Pratinjau Bridge:{C.END}")
-        print(f"    Bridge      : {C.CY}{bname}{C.END}")
-        print(f"    Rute        : {binfo['from_chain']} → {binfo['to_chain']}")
-        print(f"    Chain ID    : {dest_id}")
-        print(f"    Jumlah      : {C.G}{amount} {src_sym}{C.END}")
-        print(f"    Kontrak     : {binfo['contract']}")
-        print(f"    Tipe ABI    : {C.CY}{type_label}{C.END}")
-
-        if bridge_type == "generic":
-            log_warn("ABI generik — mungkin tidak kompatibel dengan semua bridge")
-
-        if confirm("Jalankan bridge?"):
-            self.engine.bridge_native(wallet, binfo["contract"], dest_id, amount, bridge_type)
-
-    # ── Penjadwal ───────────────────────────────────────────────
-
-    def _menu_scheduler(self):
-        while True:
-            self.scheduler.show()
-            sched_label = "⏹ Hentikan Penjadwal" if self.scheduler.is_running else "▶ Mulai Penjadwal"
-            choice = menu_select("⏰ PENJADWAL", [
-                ("1", "Jadwalkan Kirim Berulang"),
-                ("2", "Jadwalkan Swap Berulang"),
-                ("3", sched_label),
-                ("4", "📋 Lihat Log Penjadwal"),
-                ("5", "Hapus Tugas"),
-                ("0", "← Kembali"),
-            ])
-            if choice == "0": break
-
-            elif choice == "1":
-                chain = self._select_chain()
-                if not chain: continue
-                result = self._select_wallet(allow_multi=True)
-                if not result: continue
-                wallets, mode = result
-
-                target = menu_select("Kirim ke", [
-                    ("1", "Alamat tertentu"),
-                    ("2", "Alamat acak setiap jalan"),
-                ])
-                if target == "1":
-                    addrs = []
-                    while True:
-                        a = prompt(f"Alamat #{len(addrs)+1} (kosongkan untuk selesai)")
-                        if not a: break
-                        addrs.append(a)
-                    if not addrs: continue
-                else:
-                    addrs = None
-                    n_random = int(prompt("Jumlah alamat acak per jalan", "3"))
-
-                amount   = self._select_amount()
-                if not amount: continue
-                interval = int(prompt("Interval (detik)", "3600"))
-                name     = prompt("Nama tugas", f"kirim-{chain}")
-
-                if addrs:
-                    self.scheduler.add(name,
-                        lambda w=wallets, a=addrs, am=amount, m=mode:
-                            self.engine.multi_send(w, a, am, 2, m),
-                        interval)
-                else:
-                    self.scheduler.add(name,
-                        lambda w=wallets, c=n_random, am=amount, m=mode:
-                            self.engine.send_to_random(w, c, am, 2, m),
-                        interval)
-
-            elif choice == "2":
-                chain = self._select_chain()
-                if not chain: continue
-                routers = self.config.get_dex_routers(chain)
-                if not routers:
-                    log_warn(f"Belum ada DEX di {chain}"); continue
-                wallet = self._select_wallet()
-                if not wallet: continue
-
-                # Pilih router atau auto best DEX
-                r_list = list(routers.items())
-                print(f"\n  {C.BOLD}DEX Router:{C.END}")
-                print(f"    {C.G}{C.BOLD}0. 🔍 Auto Best DEX (scan setiap eksekusi){C.END}")
-                for i, (n, info) in enumerate(r_list, 1):
-                    rtype = self.engine._detect_router_type(n, info)
-                    tag = f" [{rtype.upper()}]" if rtype == "v3" else ""
-                    print(f"    {i}. {n}{tag}")
-                ri = int(prompt("Pilih router (0=auto)")) - 1
-                sched_use_best = (ri == -1)
-
-                # Pilih arah swap
-                sched_dir = menu_select("Arah Swap Terjadwal", [
-                    ("1", "Native → Token"),
-                    ("2", "Token → Native"),
-                    ("3", "Token → Token"),
-                ])
-
-                if sched_dir in ("1", "2"):
-                    token = prompt("Alamat token")
-                else:
-                    t_in  = prompt("Alamat token yang dijual")
-                    t_out = prompt("Alamat token yang dibeli")
-                    token = (t_in, t_out)
-
-                amount   = self._select_amount()
-                if not amount: continue
-                slippage = float(prompt("Slippage %", "5"))
-                interval = int(prompt("Interval (detik)", "3600"))
-
-                dir_map = {"1": "native_to_token", "2": "token_to_native", "3": "token_to_token"}
-                direction = dir_map[sched_dir]
-                dir_label = {"1": "native→token", "2": "token→native", "3": "token→token"}[sched_dir]
-                name = prompt("Nama tugas", f"swap-{dir_label}-{chain}")
-
-                if sched_use_best:
-                    # Auto Best DEX — scan semua DEX setiap kali eksekusi
-                    self.scheduler.add(name,
-                        lambda w=wallet, ch=chain, t=token, a=amount, s=slippage, d=direction:
-                            self.engine.swap_best_dex(w, ch, t, a, s, d),
-                        interval)
-                    log_info(f"📊 Swap terjadwal akan scan semua DEX setiap {interval}s")
-                else:
-                    rname, rinfo = r_list[ri]
-                    rtype = self.engine._detect_router_type(rname, rinfo)
-
-                    if direction == "native_to_token":
-                        if rtype == "v3":
-                            self.scheduler.add(name,
-                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
-                                    self.engine.swap_native_to_token_v3(w, r, t, a, s),
-                                interval)
-                        else:
-                            self.scheduler.add(name,
-                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
-                                    self.engine.swap_native_to_token(w, r, t, a, s),
-                                interval)
-                    elif direction == "token_to_native":
-                        if rtype == "v3":
-                            self.scheduler.add(name,
-                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
-                                    self.engine.swap_token_to_native_v3(w, r, t, a, s),
-                                interval)
-                        else:
-                            self.scheduler.add(name,
-                                lambda w=wallet, r=rinfo["address"], t=token, a=amount, s=slippage:
-                                    self.engine.swap_token_to_native(w, r, t, a, s),
-                                interval)
-                    elif direction == "token_to_token":
-                        t_in_a, t_out_a = token
-                        if rtype == "v3":
-                            self.scheduler.add(name,
-                                lambda w=wallet, r=rinfo["address"], ti=t_in_a, to=t_out_a, a=amount, s=slippage:
-                                    self.engine.swap_token_to_token_v3(w, r, ti, to, a, s),
-                                interval)
-                        else:
-                            self.scheduler.add(name,
-                                lambda w=wallet, r=rinfo["address"], ti=t_in_a, to=t_out_a, a=amount, s=slippage:
-                                    self.engine.swap_token_to_token(w, r, ti, to, a, s),
-                                interval)
-
-            elif choice == "3":
-                if self.scheduler.is_running:
-                    self.scheduler.stop()
-                else:
-                    self.scheduler.start()
-
-            elif choice == "4":
-                self.scheduler.show_log()
-
-            elif choice == "5":
-                self.scheduler.show()
-                idx = int(prompt("Tugas # yang dihapus")) - 1
-                self.scheduler.remove(idx)
-
-    # ── Saldo ───────────────────────────────────────────────────
-
-    def _menu_balances(self):
-        chain = self._select_chain()
-        if not chain: return
-        wallets = self.config.get_wallets()
-        if not wallets:
-            log_warn("Belum ada wallet!"); return
-
-        info   = self.config.get_chains()[chain]
-        tokens = self.config.get_tokens(chain)
-
-        print(f"\n  {'═' * 55}")
-        print(f"  {C.BOLD}Saldo di {C.CY}{chain}{C.END}")
-        print(f"  {'═' * 55}")
-
-        for w in wallets:
-            bal = self.engine.get_balance(w["address"])
-            print(f"\n  {C.BOLD}{w['name']}{C.END} ({short_addr(w['address'])})")
-            print(f"    {info['symbol']:>8}: {C.G}{bal:.8f}{C.END}")
-            for sym, tok in tokens.items():
+            log_err(f"Failed to check balance: {e}")
+            return False
+        
+        # Check if balance is sufficient
+        if balance_eth >= min_balance:
+            return True
+        
+        # Balance insufficient - try faucet
+        log_warn(f"⚠️  Balance rendah: {balance_eth} ETH (min: {min_balance} ETH)")
+        
+        # Only try faucet on testnet
+        chain_info = self._chain_info()
+        if not chain_info.get("testnet", False):
+            log_warn("⚠️  Bukan testnet, skip auto-faucet")
+            return False
+        
+        chain_name = chain_info.get("name", self.chain_name)
+        log_info(f"🔄 Mencoba auto-faucet untuk {chain_name}...")
+        
+        # Try faucet up to 3 times
+        for attempt in range(1, 4):
+            log_info(f"Attempt {attempt}/3...")
+            if self._request_faucet(chain_name, address):
+                # Wait a bit for transaction to propagate
+                time.sleep(5)
+                # Re-check balance
                 try:
-                    tb = self.engine.get_token_balance(tok["address"], w["address"])
-                    print(f"    {sym:>8}: {C.G}{tb:.6f}{C.END}")
-                except Exception:
-                    print(f"    {sym:>8}: {C.R}error{C.END}")
+                    new_balance_wei = self.w3.eth.get_balance(address)
+                    new_balance_eth = Decimal(str(self.w3.from_wei(new_balance_wei, "ether")))
+                    log_ok(f"✅ Balance after faucet: {new_balance_eth} ETH")
+                    if new_balance_eth >= min_balance:
+                        return True
+                except Exception as e:
+                    log_err(f"Failed to re-check balance: {e}")
+        
+        # All attempts failed
+        log_err(f"❌ Auto-faucet gagal. Balance tetap: {balance_eth} ETH")
+        return False
 
-        print(f"\n  {'═' * 55}")
-
-    # ── Riwayat ─────────────────────────────────────────────────
-
-    def _menu_history(self):
-        h = self.engine.tx_history
-        if not h:
-            log_info("Belum ada transaksi"); return
-
-        n = min(20, len(h))
-        print(f"\n  {C.BOLD}{n} Transaksi Terakhir:{C.END}")
-        print(f"  {'─' * 72}")
-        for tx in h[-n:]:
-            st = f"{C.G}✓{C.END}" if tx.get("status") == "sukses" else f"{C.R}✗{C.END}"
-            ts = tx.get("timestamp", "")[:19]
-            print(f"  {st} {C.DIM}{ts}{C.END} [{C.CY}{tx.get('chain','?')}{C.END}] "
-                  f"{tx.get('type','?')}  {short_addr(tx.get('from',''))} → {short_addr(tx.get('to',''))}")
-            print(f"    {C.DIM}TX: {tx.get('tx_hash','?')}{C.END}")
-        print(f"  {'─' * 72}")
-
-
-# ═══════════════════════════════════════════════════════════════
-# TITIK MASUK
-# ═══════════════════════════════════════════════════════════════
-
-def main():
-    print(f"""
-{C.Y}{'━' * 55}
-  ⚠️  PERINGATAN KEAMANAN
-{'━' * 55}{C.END}
-  Private key akan disimpan di {C.BOLD}{CONFIG_FILE}{C.END}
-  di mesin lokal kamu.
-
-  • JANGAN bagikan file konfigurasi ke siapapun.
-  • JANGAN jalankan tool ini di mesin yang tidak terpercaya.
-  • Gunakan hot wallet khusus dengan jumlah kecil.
-  • Disarankan untuk testnet / operasi nilai kecil.
-{C.Y}{'━' * 55}{C.END}
-""")
-    input(f"  {C.DIM}Tekan Enter untuk lanjut…{C.END}")
-
-    CLI().run()
-
-
-if __name__ == "__main__":
-    main()
