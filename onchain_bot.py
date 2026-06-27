@@ -31,8 +31,17 @@ import time
 import secrets
 import threading
 import traceback
+import urllib.request
+import urllib.error
 from datetime import datetime
 from decimal import Decimal
+
+# For faucet functionality
+try:
+    import requests
+except ImportError:
+    requests = None
+
 
 # ── Import web3 (mendukung v5.x dan v7.x) ──────────────────
 _WEB3_ERR = None
@@ -124,7 +133,7 @@ KNOWN_CHAINS = {
     1301:     ("Unichain Sepolia",  "ETH",   "https://sepolia.uniscan.xyz",                "testnet", "https://sepolia.unichain.org"),
     10200:    ("Gnosis Chiado",     "xDAI",  "https://gnosis-chiado.blockscout.com",       "testnet", "https://rpc.chiadochain.net"),
     5003:     ("Mantle Sepolia",    "MNT",   "https://sepolia.mantlescan.xyz",             "testnet", "https://rpc.sepolia.mantle.xyz"),
-    41455:    ("Monad Testnet",     "MON",   "https://testnet.monadexplorer.com",          "testnet", "https://testnet-rpc.monad.xyz"),
+    10143:    ("Monad Testnet",     "MON",   "https://testnet.monadexplorer.com",          "testnet", "https://testnet-rpc.monad.xyz"),
 }
 
 # ── Deteksi Platform ────────────────────────────────────────────
@@ -782,6 +791,8 @@ class BlockchainEngine:
         self.current_chain: str | None = None
         self.tx_history: list = []
         self._load_history()
+        # Faucet-related state
+        self._faucet_last_request = {}
 
     # ── Riwayat ─────────────────────────────────────────────────
 
@@ -945,6 +956,8 @@ class BlockchainEngine:
 
     def send_native(self, wallet, to_address, amount_ether):
         """Kirim token native ke satu alamat."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
 
@@ -1091,6 +1104,8 @@ class BlockchainEngine:
 
     def wrap_native(self, wallet, amount_ether):
         """Wrap native token → wrapped token (deposit ke kontrak WETH/WMON)."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
         addr = Web3.to_checksum_address(wallet["address"])
@@ -1131,6 +1146,8 @@ class BlockchainEngine:
 
     def unwrap_native(self, wallet, amount_ether):
         """Unwrap wrapped token → native token (withdraw dari kontrak WETH/WMON)."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         amount_wei = self.w3.to_wei(Decimal(str(amount_ether)), "ether")
         addr = Web3.to_checksum_address(wallet["address"])
@@ -1178,6 +1195,8 @@ class BlockchainEngine:
 
     def swap_native_to_token(self, wallet, router_address, token_address, amount_ether, slippage=5):
         """Swap native → ERC-20 via router kompatibel Uniswap V2."""
+        if not self._ensure_minimum_balance(wallet, amount_ether):
+            raise ValueError("Insufficient funds and faucet failed")
         info = self._chain_info()
         router = self._get_router(router_address)
         weth = self._get_wrapped_native(router, router_address)
@@ -1797,7 +1816,7 @@ class BlockchainEngine:
 # PENJADWAL TUGAS
 # ═══════════════════════════════════════════════════════════════
 
-class Scheduler:
+    def _request_faucet(self, chain_name: str, address: str) -> bool:        """Attempt to get funds from a faucet for the given address on the given chain."""        # Faucet configurations: key = chain name as in config        FAUCETS = {            "Sepolia": {                "url": "https://sepolia-faucet.pk910.de/",                "method": "POST",                "headers": {"Content-Type": "application/json"},                "data": lambda addr: {"address": addr},            },            "Polygon Amoy": {                "url": "https://faucet.polygon.technology/",                "method": "POST",                "headers": {"Content-Type": "application/json"},                "data": lambda addr: {"address": addr},            },            "Arbitrum Sepolia": {                "url": "https://arbitrum-sepolia.faucet.arbitrum.io/",                "method": "POST",                "headers": {"Content-Type": "application/json"},                "data": lambda addr: {"address": addr},            },            "Optimism Sepolia": {                "url": "https://opsepolia-fuel.com/",                "method": "POST",                "headers": {"Content-Type": "application/json"},                "data": lambda addr: {"address": addr},            },            # Add more faucets as needed        }        if chain_name not in FAUCETS:            log_warn(f"No faucet configured for {chain_name}")            return False        conf = FAUCETS[chain_name]        url = conf["url"]        method = conf.get("method", "GET").upper()        headers = conf.get("headers", {})        data_func = conf.get("data")        if data_func is None:            data = None        else:            data = data_func(address)        # Rate limiting: wait at least 1 minute between requests per address        now = time.time()        last = self._faucet_last_request.get((chain_name, address), 0)        if now - last < 60:            wait = int(60 - (now - last))            log_info(f"Faucet rate limit: waiting {wait}s before next request for {address} on {chain_name}")            time.sleep(wait)        try:            if requests is not None:                if method == "POST":                    resp = requests.post(url, json=data, headers=headers, timeout=30)                else:                    resp = requests.get(url, params=data, headers=headers, timeout=30)                if resp.status_code in (200, 201, 202):                    log_ok(f"Faucet request successful for {address} on {chain_name}")                    self._faucet_last_request[(chain_name, address)] = time.time()                    return True                else:                    log_err(f"Faucet request failed: {resp.status_code} {resp.text[:200]}")            else:                # Fallback to urllib                import urllib.request                import urllib.error                data_encoded = None                if data is not None:                    if method == "POST":                        data_encoded = json.dumps(data).encode("utf-8")                    else:                        # For GET, we would need to append to URL - skip for simplicity                        log_warn("GET with data not supported in fallback, skipping faucet")                        return False                req = urllib.request.Request(url, data=data_encoded, headers=headers, method=method)                try:                    with urllib.request.urlopen(req, timeout=30) as resp:                        if 200 <= resp.status < 300:                            log_ok(f"Faucet request successful for {address} on {chain_name}")                            self._faucet_last_request[(chain_name, address)] = time.time()                            return True                except urllib.error.HTTPError as e:                    log_err(f"Faucet request failed: {e.code} {e.read()[:200]}")                except Exception as e:                    log_err(f"Faucet request error: {e}")        except Exception as e:            log_err(f"Faucet request error: {e}")        return False    def _ensure_minimum_balance(self, wallet: dict, amount_ether: Decimal, min_balance: Decimal = Decimal("0.001")) -> bool:        """Ensure the wallet has enough balance for the transaction plus a minimum buffer."""        if self.w3 is None:            return False        address = wallet["address"]        try:            balance = self.get_balance(address)            needed = amount_ether + min_balance            if balance >= needed:                return True            # Balance too low, try to get from faucet if on testnet            chain_info = self._chain_info()            if chain_info.get("type") == "testnet":                log_warn(f"Low balance on {self.current_chain}: {balance} {chain_info["symbol"]}, need {needed}")                # Try to request from faucet up to 3 times                for attempt in range(3):                    if self._request_faucet(self.current_chain, address):                        # Wait a bit for the transaction to be mined                        time.sleep(15)                        balance = self.get_balance(address)                        if balance >= needed:                            log_ok(f"Balance after faucet: {balance} {chain_info["symbol"]}")                            return True                    else:                        if attempt < 2:                            time.sleep(10)                log_err(f"Failed to obtain sufficient funds from faucet after {attempt + 1} attempts")            else:                log_warn(f"Not a testnet or faucet not enabled for {self.current_chain}")        except Exception as e:            log_err(f"Error checking balance: {e}")        return Falseclass Scheduler:
     """Penjadwal tugas latar belakang untuk transaksi berulang.
 
     Saat berjalan, output disimpan ke buffer agar tidak mengganggu
