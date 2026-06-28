@@ -1,0 +1,120 @@
+{
+  "timestamp": "2026-06-28T04:05:29.088419",
+  "wallet": "0xC11B7A03B924C24F91364986139D0BeceA20b2EF",
+  "results": {
+    "Monad Testnet": {
+      "status": "ok",
+      "balance": 4.886059166036553,
+      "symbol": "MON",
+      "chain_id": 10143
+    },
+    "DAC-testnet": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "DAC",
+      "chain_id": 21894
+    },
+    "Sepolia": {
+      "status": "ok",
+      "balance": 0.09964053287544178,
+      "symbol": "ETH",
+      "chain_id": 11155111
+    },
+    "Holesky": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "ETH",
+      "chain_id": 17000
+    },
+    "BSC Testnet": {
+      "status": "ok",
+      "balance": 0.01,
+      "symbol": "TBNB",
+      "chain_id": 97
+    },
+    "Polygon Amoy": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "MATIC",
+      "chain_id": 80002
+    },
+    "Arbitrum Sepolia": {
+      "status": "ok",
+      "balance": 0.025,
+      "symbol": "ETH",
+      "chain_id": 421614
+    },
+    "Optimism Sepolia": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "ETH",
+      "chain_id": 11155420
+    },
+    "Avalanche Fuji": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "AVAX",
+      "chain_id": 43113
+    },
+    "Base Sepolia": {
+      "status": "ok",
+      "balance": 0.025,
+      "symbol": "ETH",
+      "chain_id": 84532
+    },
+    "Scroll Sepolia": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "ETH",
+      "chain_id": 534351
+    },
+    "Linea Sepolia": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "ETH",
+      "chain_id": 59141
+    },
+    "zkSync Sepolia": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "ETH",
+      "chain_id": 300
+    },
+    "Blast Sepolia": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "ETH",
+      "chain_id": 168587773
+    },
+    "Berachain Bepolia": {
+      "status": "ok",
+      "balance": 0.1,
+      "symbol": "BERA",
+      "chain_id": 80069
+    },
+    "Unichain Sepolia": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "ETH",
+      "chain_id": 1301
+    },
+    "Gnosis Chiado": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "XDAI",
+      "chain_id": 10200
+    },
+    "Mantle Sepolia": {
+      "status": "ok",
+      "balance": 0.0,
+      "symbol": "MNT",
+      "chain_id": 5003
+    },
+    "Berachain Bartio": {
+      "status": "rpc_error",
+      "error": "not connected",
+      "symbol": "BERA",
+      "chain_id": 80084
+    }
+  }
+}

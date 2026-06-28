@@ -1,0 +1,19 @@
+{
+  "bridge_arbitrum": {
+    "success": true,
+    "tx": "b9b5aae56aa747f17e3358e1d03e857a87b631485339d4d8772b993463001d1c"
+  },
+  "bridge_blast": {
+    "success": true,
+    "tx": "28131157ed0598b8c1baca593f8cee2a20ee746af8ebe75ff22bb5a6c2cb36e4",
+    "portal": "0x0eC143D865D90050C65f50b8B97B3c4C2F6A4B69"
+  },
+  "send_arbitrum": {
+    "success": true,
+    "tx": "3ef280b324ae354d4eadf46f7c8ec950db601ba04c6101375ac4078cd7d67f63"
+  },
+  "send_blast": {
+    "success": false,
+    "tx": null
+  }
+}

@@ -1,0 +1,256 @@
+{
+  "timestamp": "2026-06-28T11:14:12.498719",
+  "wallet": "0xC11B7A03B924C24F91364986139D0BeceA20b2EF",
+  "summary": {
+    "send_success": 6,
+    "send_skipped": 13,
+    "send_failed": 0,
+    "swap_success": 3,
+    "swap_failed": 1
+  },
+  "balance_delta": {
+    "Monad Testnet": {
+      "before": 4.886059166036553,
+      "after": 4.880613872036553,
+      "delta": -0.005445294000000267,
+      "symbol": "MON"
+    },
+    "DAC-testnet": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "DAC"
+    },
+    "Sepolia": {
+      "before": 0.09964053287544178,
+      "after": 0.09591846919869765,
+      "delta": -0.0037220636767441306,
+      "symbol": "ETH"
+    },
+    "Holesky": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "ETH"
+    },
+    "BSC Testnet": {
+      "before": 0.01,
+      "after": 0.0099879,
+      "delta": -1.2100000000000999e-05,
+      "symbol": "TBNB"
+    },
+    "Polygon Amoy": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "MATIC"
+    },
+    "Arbitrum Sepolia": {
+      "before": 0.025,
+      "after": 0.024989276133648,
+      "delta": -1.0723866352001232e-05,
+      "symbol": "ETH"
+    },
+    "Optimism Sepolia": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "ETH"
+    },
+    "Avalanche Fuji": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "AVAX"
+    },
+    "Base Sepolia": {
+      "before": 0.025,
+      "after": 0.024989633522989343,
+      "delta": -1.0366477010657904e-05,
+      "symbol": "ETH"
+    },
+    "Scroll Sepolia": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "ETH"
+    },
+    "Linea Sepolia": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "ETH"
+    },
+    "zkSync Sepolia": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "ETH"
+    },
+    "Blast Sepolia": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "ETH"
+    },
+    "Berachain Bepolia": {
+      "before": 0.1,
+      "after": 0.099989999997543,
+      "delta": -1.0000002457002943e-05,
+      "symbol": "BERA"
+    },
+    "Unichain Sepolia": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "ETH"
+    },
+    "Gnosis Chiado": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "XDAI"
+    },
+    "Mantle Sepolia": {
+      "before": 0.0,
+      "after": 0.0,
+      "delta": 0.0,
+      "symbol": "MNT"
+    }
+  },
+  "send_details": {
+    "Monad Testnet": {
+      "status": "success",
+      "tx": "0xd7c96aa6ed81799228f59fa3805583fb2060d6aef4bc4b9f9b2cdaaf51e3dfd5",
+      "to": "0x60e8aFCC03847f0A9ae704Cdf89ce55de303a8Fc",
+      "amount": 1e-05,
+      "symbol": "MON",
+      "explorer_url": "https://testnet.monadexplorer.com/tx/0xd7c96aa6ed81799228f59fa3805583fb2060d6aef4bc4b9f9b2cdaaf51e3dfd5"
+    },
+    "DAC-testnet": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Sepolia": {
+      "status": "success",
+      "tx": "0xe34056283de163d61d0d2300d76b051aeea42f92f30f71ab3cc9c566c0bb6bdb",
+      "to": "0x5F3aE2bD0d5AE8bCDeF2204A171850d5B93B2D69",
+      "amount": 1e-05,
+      "symbol": "ETH",
+      "explorer_url": "https://sepolia.etherscan.io/tx/0xe34056283de163d61d0d2300d76b051aeea42f92f30f71ab3cc9c566c0bb6bdb"
+    },
+    "Holesky": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "BSC Testnet": {
+      "status": "success",
+      "tx": "0x16935f8972d5a6a8dc4d9355623be04d0a34db34b0612ad578875ac3fe30087d",
+      "to": "0x6642e48f95880e5Af0FFEDF0D2B025080c05B297",
+      "amount": 1e-05,
+      "symbol": "TBNB",
+      "explorer_url": "https://testnet.bscscan.com/tx/0x16935f8972d5a6a8dc4d9355623be04d0a34db34b0612ad578875ac3fe30087d"
+    },
+    "Polygon Amoy": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Arbitrum Sepolia": {
+      "status": "success",
+      "tx": "0xbfda09417f30b1ae1a117006f5f1c653539ab33f67d3ece1db3dab9374293b41",
+      "to": "0xD17a4236E3FB36B22fe606972BFea7330aF5c9c9",
+      "amount": 1e-05,
+      "symbol": "ETH",
+      "explorer_url": "https://sepolia.arbiscan.io/tx/0xbfda09417f30b1ae1a117006f5f1c653539ab33f67d3ece1db3dab9374293b41"
+    },
+    "Optimism Sepolia": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Avalanche Fuji": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Base Sepolia": {
+      "status": "success",
+      "tx": "0x097a28ab7cf3874ea8ebe64477bd81196b1a0d3527722158352bc468e45adf6f",
+      "to": "0x1FAf24648ED1298A9De44D02e2c2ff27d70ce1fC",
+      "amount": 1e-05,
+      "symbol": "ETH",
+      "explorer_url": "https://sepolia.basescan.org/tx/0x097a28ab7cf3874ea8ebe64477bd81196b1a0d3527722158352bc468e45adf6f"
+    },
+    "Scroll Sepolia": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Linea Sepolia": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "zkSync Sepolia": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Blast Sepolia": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Berachain Bepolia": {
+      "status": "success",
+      "tx": "0x6059c2e90c3364467f73d401ca51cc7a66b002ec5d5a196a10f20669cf08c8b5",
+      "to": "0x46b5cb59b538d112e6997e46fEFCa5A5Ae00A961",
+      "amount": 1e-05,
+      "symbol": "BERA",
+      "explorer_url": "https://bepolia.beratrail.io/tx/0x6059c2e90c3364467f73d401ca51cc7a66b002ec5d5a196a10f20669cf08c8b5"
+    },
+    "Unichain Sepolia": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Gnosis Chiado": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Mantle Sepolia": {
+      "status": "skipped",
+      "reason": "no balance"
+    },
+    "Berachain Bartio": {
+      "status": "skipped",
+      "reason": "no balance"
+    }
+  },
+  "swap_details": {
+    "Sepolia": {
+      "dex_chain_key": "Sepolia",
+      "weth": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "operations": {
+        "wrap": {
+          "status": "success",
+          "tx": "0x014ed2f93d79c35ec50dbb9ba1684eb6b0697dc42fc92f9e5c1036a81cb16914",
+          "explorer_url": "https://sepolia.etherscan.io/tx/0x014ed2f93d79c35ec50dbb9ba1684eb6b0697dc42fc92f9e5c1036a81cb16914"
+        },
+        "unwrap": {
+          "status": "success",
+          "tx": "0xe8666b8d5ab7ff042d49a97ce86d24ea699baccdde0ca35e6fb434ae4daa5b86",
+          "explorer_url": "https://sepolia.etherscan.io/tx/0xe8666b8d5ab7ff042d49a97ce86d24ea699baccdde0ca35e6fb434ae4daa5b86"
+        }
+      }
+    },
+    "Monad Testnet": {
+      "dex_chain_key": "monad-testnet",
+      "weth": "0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701",
+      "operations": {
+        "wrap": {
+          "status": "success",
+          "tx": "0x993d74891b8a94b5e5b789d91782d7a37fad5d50b02e212a29691aaa2ad0e0f1",
+          "explorer_url": "https://testnet.monadexplorer.com/tx/0x993d74891b8a94b5e5b789d91782d7a37fad5d50b02e212a29691aaa2ad0e0f1"
+        },
+        "unwrap": {
+          "status": "error",
+          "error": "Could not transact with/call contract function, is contract deployed correctly and chain synced?"
+        }
+      }
+    }
+  }
+}

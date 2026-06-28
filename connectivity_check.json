@@ -1,0 +1,150 @@
+[
+  {
+    "chain": "monad-testnet",
+    "chain_id": 10143,
+    "symbol": "MON",
+    "rpc": "https://testnet-rpc.monad.xyz",
+    "connect": true,
+    "balance": 4.898960282036553
+  },
+  {
+    "chain": "DAC-testnet",
+    "chain_id": 21894,
+    "symbol": "DAC",
+    "rpc": "https://rpctest.dachain.tech",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Sepolia",
+    "chain_id": 11155111,
+    "symbol": "ETH",
+    "rpc": "https://ethereum-sepolia.publicnode.com",
+    "connect": true,
+    "balance": 0.0812915673620878
+  },
+  {
+    "chain": "Holesky",
+    "chain_id": 17000,
+    "symbol": "ETH",
+    "rpc": "https://ethereum-holesky-rpc.publicnode.com",
+    "connect": false
+  },
+  {
+    "chain": "BSC Testnet",
+    "chain_id": 97,
+    "symbol": "TBNB",
+    "rpc": "https://data-seed-prebsc-1-s1.binance.org:8545",
+    "connect": false
+  },
+  {
+    "chain": "Polygon Amoy",
+    "chain_id": 80002,
+    "symbol": "MATIC",
+    "rpc": "https://rpc-amoy.polygon.technology",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Arbitrum Sepolia",
+    "chain_id": 421614,
+    "symbol": "ETH",
+    "rpc": "https://sepolia-rollup.arbitrum.io/rpc",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Optimism Sepolia",
+    "chain_id": 11155420,
+    "symbol": "ETH",
+    "rpc": "https://sepolia.optimism.io",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Avalanche Fuji",
+    "chain_id": 43113,
+    "symbol": "AVAX",
+    "rpc": "https://api.avax-test.network/ext/bc/C/rpc",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Base Sepolia",
+    "chain_id": 84532,
+    "symbol": "ETH",
+    "rpc": "https://sepolia.base.org",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Scroll Sepolia",
+    "chain_id": 534351,
+    "symbol": "ETH",
+    "rpc": "https://sepolia-rpc.scroll.io",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Linea Sepolia",
+    "chain_id": 59141,
+    "symbol": "ETH",
+    "rpc": "https://rpc.sepolia.linea.build",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "zkSync Sepolia",
+    "chain_id": 300,
+    "symbol": "ETH",
+    "rpc": "https://sepolia.era.zksync.dev",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Blast Sepolia",
+    "chain_id": 168587773,
+    "symbol": "ETH",
+    "rpc": "https://sepolia.blast.io",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Berachain Bartio",
+    "chain_id": 80084,
+    "symbol": "BERA",
+    "rpc": "https://bartio.rpc.berachain.com",
+    "connect": false
+  },
+  {
+    "chain": "Unichain Sepolia",
+    "chain_id": 1301,
+    "symbol": "ETH",
+    "rpc": "https://sepolia.unichain.org",
+    "connect": false
+  },
+  {
+    "chain": "Gnosis Chiado",
+    "chain_id": 10200,
+    "symbol": "XDAI",
+    "rpc": "https://rpc.chiadochain.net",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Mantle Sepolia",
+    "chain_id": 5003,
+    "symbol": "MNT",
+    "rpc": "https://rpc.sepolia.mantle.xyz",
+    "connect": true,
+    "balance": 0.0
+  },
+  {
+    "chain": "Monad Testnet",
+    "chain_id": 41455,
+    "symbol": "MON",
+    "rpc": "https://testnet-rpc.monad.xyz",
+    "connect": true,
+    "balance": 4.898960282036553
+  }
+]

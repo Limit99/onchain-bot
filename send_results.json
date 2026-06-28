@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-06-28T07:44:47Z",
+  "wallet": "0xC11B7A03B924C24F91364986139D0BeceA20b2EF",
+  "operation": "send_minimal_post_bridge",
+  "results": {
+    "Monad Testnet": {
+      "status": "success",
+      "tx": "1751c6da8d30e163efe272e5f220d270f65215de4bfe301c329783827edeb280",
+      "to": "0x7eFEbEC31255fb1d48653F8033b3D9d77191F3b3",
+      "amount": 1e-05,
+      "symbol": "MON",
+      "explorer": "https://testnet.monadexplorer.com/tx/1751c6da8d30e163efe272e5f220d270f65215de4bfe301c329783827edeb280"
+    },
+    "Sepolia": {
+      "status": "success",
+      "tx": "c0b39b17e8ef7190930a919222e2d1ac618c8bd45021500890c9f5b4738fd0e1",
+      "to": "0x3C023C80fE2a281542a12096914B21B874C0937a",
+      "amount": 1e-05,
+      "symbol": "ETH",
+      "explorer": "https://sepolia.etherscan.io/tx/c0b39b17e8ef7190930a919222e2d1ac618c8bd45021500890c9f5b4738fd0e1"
+    },
+    "BSC Testnet": {
+      "status": "success",
+      "tx": "2a5667b8d21f287298ee6285a9440499c65f6b4b6700de6db0face1d2bd41147",
+      "to": "0x888761150f752938284213dB9B515FF3035e2a4b",
+      "amount": 1e-05,
+      "symbol": "TBNB",
+      "explorer": "https://testnet.bscscan.com/tx/2a5667b8d21f287298ee6285a9440499c65f6b4b6700de6db0face1d2bd41147"
+    },
+    "Arbitrum Sepolia": {
+      "status": "error",
+      "error": "{'code': -32000, 'message': 'intrinsic gas too low'}"
+    },
+    "Base Sepolia": {
+      "status": "success",
+      "tx": "cdd517876bd5a32d81146a785712265a2489d1314e7b719399e4794476375a38",
+      "to": "0x4D2961693Ea147d50F3518e078f11e1B99D1Cd25",
+      "amount": 1e-05,
+      "symbol": "ETH",
+      "explorer": "https://sepolia.basescan.org/tx/cdd517876bd5a32d81146a785712265a2489d1314e7b719399e4794476375a38"
+    },
+    "Berachain Bepolia": {
+      "status": "success",
+      "tx": "7ee73666e30ed5431a17621d033280118891322096f49133889714fbfe0fd0de",
+      "to": "0x806f35ce09a538D556F609E9434e11602CbCdadc",
+      "amount": 1e-05,
+      "symbol": "BERA",
+      "explorer": "https://bepolia.beratrail.io/tx/7ee73666e30ed5431a17621d033280118891322096f49133889714fbfe0fd0de"
+    }
+  }
+}

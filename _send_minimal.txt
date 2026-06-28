@@ -1,0 +1,9 @@
+📤 SEND native dari 0xC11B7A03B924C24F91364986139D0BeceA20b2EF (minimal 1e-05)
+  ❌ Monad Testnet             error: Transaction must include these fields: {'nonce'}
+  ❌ Sepolia                   error: Transaction must include these fields: {'nonce'}
+  ❌ BSC Testnet               error: Transaction must include these fields: {'nonce'}
+  ❌ Arbitrum Sepolia          error: Transaction must include these fields: {'nonce'}
+  ❌ Base Sepolia              error: Transaction must include these fields: {'nonce'}
+  ❌ Berachain Bepolia         error: Transaction must include these fields: {'nonce'}
+
+✅ Saved to send_results.json

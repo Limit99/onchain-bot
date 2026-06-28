@@ -1,0 +1,170 @@
+[
+  {
+    "chain": "monad-testnet",
+    "chain_id": 10143,
+    "symbol": "MON",
+    "connect": true,
+    "balance": 4.898960282036553,
+    "random_send": {
+      "to": "0x20cCCa1A0B58348371FfDEd8BE0bca690693F13D",
+      "amount": 0.002
+    },
+    "swap": {
+      "zkswap-v2": true,
+      "bean-swap": true
+    }
+  },
+  {
+    "chain": "DAC-testnet",
+    "chain_id": 21894,
+    "symbol": "DAC",
+    "connect": false
+  },
+  {
+    "chain": "Sepolia",
+    "chain_id": 11155111,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0812915673620878,
+    "random_send": {
+      "to": "0x56FBBEFBf2E661815b321B005f05C7D2ce945a92",
+      "amount": 0.002
+    },
+    "swap": {
+      "uniswap-v2": true,
+      "uniswap-v3": true
+    }
+  },
+  {
+    "chain": "Holesky",
+    "chain_id": 17000,
+    "symbol": "ETH",
+    "connect": false
+  },
+  {
+    "chain": "BSC Testnet",
+    "chain_id": 97,
+    "symbol": "TBNB",
+    "connect": false
+  },
+  {
+    "chain": "Polygon Amoy",
+    "chain_id": 80002,
+    "symbol": "MATIC",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Arbitrum Sepolia",
+    "chain_id": 421614,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Optimism Sepolia",
+    "chain_id": 11155420,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Avalanche Fuji",
+    "chain_id": 43113,
+    "symbol": "AVAX",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Base Sepolia",
+    "chain_id": 84532,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Scroll Sepolia",
+    "chain_id": 534351,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Linea Sepolia",
+    "chain_id": 59141,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "zkSync Sepolia",
+    "chain_id": 300,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Blast Sepolia",
+    "chain_id": 168587773,
+    "symbol": "ETH",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Berachain Bartio",
+    "chain_id": 80084,
+    "symbol": "BERA",
+    "connect": false
+  },
+  {
+    "chain": "Unichain Sepolia",
+    "chain_id": 1301,
+    "symbol": "ETH",
+    "connect": false
+  },
+  {
+    "chain": "Gnosis Chiado",
+    "chain_id": 10200,
+    "symbol": "XDAI",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Mantle Sepolia",
+    "chain_id": 5003,
+    "symbol": "MNT",
+    "connect": true,
+    "balance": 0.0,
+    "random_send": "balance_insufficient",
+    "swap": {}
+  },
+  {
+    "chain": "Monad Testnet",
+    "chain_id": 41455,
+    "symbol": "MON",
+    "connect": true,
+    "balance": 4.886059166036553,
+    "random_send": "send_error: {'code': -32000, 'message': 'Invalid chain ID: expected 10143, got 41455'}",
+    "swap": {}
+  }
+]

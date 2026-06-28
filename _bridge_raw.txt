@@ -1,0 +1,26 @@
+/data/data/com.termux/files/home/onchain-bot/step_c_bridge.py:100: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "timestamp": datetime.utcnow().isoformat(),
+[i] Sepolia connected: True  chain_id=11155111
+[i] Sepolia balance: 0.095918469198697642 ETH
+
+=== Bridge → Optimism Sepolia (op_stack_portal) ===
+  [✓] tx sent: 0x615f2289d8bb6d2646ea71b31f73c4a9b70fd41233973aa3fb891508a437691d
+      https://sepolia.etherscan.io/tx/0x615f2289d8bb6d2646ea71b31f73c4a9b70fd41233973aa3fb891508a437691d
+      receipt status: success  gas_used=83093
+
+=== Bridge → Base Sepolia (op_stack_portal) ===
+  [✓] tx sent: 0x9c2c7e1940adff151931b39f573e02d7373c7929bbfb8f142f7530f0a9f4fbb9
+      https://sepolia.etherscan.io/tx/0x9c2c7e1940adff151931b39f573e02d7373c7929bbfb8f142f7530f0a9f4fbb9
+      receipt status: success  gas_used=63093
+
+=== Bridge → Unichain Sepolia (op_stack_portal) ===
+  [✓] tx sent: 0x3f70873fdfd7f172f82530f5c50cd9f16fff56f65c15a7df7a95b15fa9de37fa
+      https://sepolia.etherscan.io/tx/0x3f70873fdfd7f172f82530f5c50cd9f16fff56f65c15a7df7a95b15fa9de37fa
+      receipt status: success  gas_used=82750
+
+=== Bridge → Blast Sepolia (blast_l1_bridge) ===
+  [✓] tx sent: 0xc62575b0fa03cf601b9aecceff83dee0dfecb756bcea904d268d0d7a77e5b9ac
+      https://sepolia.etherscan.io/tx/0xc62575b0fa03cf601b9aecceff83dee0dfecb756bcea904d268d0d7a77e5b9ac
+      receipt status: success  gas_used=153549
+
+[✓] saved → /data/data/com.termux/files/home/onchain-bot/bridge_results.json

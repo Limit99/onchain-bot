@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-06-28T14:38:43.336665",
+  "wallet": "0xC11B7A03B924C24F91364986139D0BeceA20b2EF",
+  "operation": "swap_wrap_unwrap",
+  "results": {
+    "Sepolia": {
+      "dex_chain_key": "Sepolia",
+      "weth": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "operations": {
+        "wrap": {
+          "status": "success",
+          "tx": "0x54e490d2297ace0a89158120b095775d267c79de56d94d09753037a649f84552",
+          "explorer_url": "https://sepolia.etherscan.io/tx/0x54e490d2297ace0a89158120b095775d267c79de56d94d09753037a649f84552"
+        },
+        "unwrap": {
+          "status": "success",
+          "tx": "0x955158a1eb50383e7fe7e1cbe19dcea80aade98adadc48746a61aea4afa72e09",
+          "explorer_url": "https://sepolia.etherscan.io/tx/0x955158a1eb50383e7fe7e1cbe19dcea80aade98adadc48746a61aea4afa72e09"
+        }
+      }
+    },
+    "Monad Testnet": {
+      "dex_chain_key": "monad-testnet",
+      "weth": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+      "operations": {
+        "wrap": {
+          "status": "success",
+          "tx": "0x03acfe374c842c22875b581d9f7a298b1f61c7577e0152d5819c1ef45f5bb91d",
+          "explorer_url": "https://testnet.monadexplorer.com/tx/0x03acfe374c842c22875b581d9f7a298b1f61c7577e0152d5819c1ef45f5bb91d"
+        },
+        "unwrap": {
+          "status": "success",
+          "tx": "0x4ea9360697f7bdbbcdb9b2f5fa4ab75d606a2efeb906c870567622dbb516777d",
+          "explorer_url": "https://testnet.monadexplorer.com/tx/0x4ea9360697f7bdbbcdb9b2f5fa4ab75d606a2efeb906c870567622dbb516777d"
+        }
+      }
+    },
+    "Base Sepolia": {
+      "dex_chain_key": "Base Sepolia",
+      "weth": "0x4200000000000000000000000000000000000006",
+      "operations": {
+        "wrap": {
+          "status": "success",
+          "tx": "0xc02c3e08fa75734f7f39c873aa3bc1cd7be94a8073f3a9861f1d10ec93a5a74c",
+          "explorer_url": "https://sepolia.basescan.org/tx/0xc02c3e08fa75734f7f39c873aa3bc1cd7be94a8073f3a9861f1d10ec93a5a74c"
+        },
+        "unwrap": {
+          "status": "success",
+          "tx": "0x0da43cbd493bd62dd795ec3c9ee7107bbcda071d2a0630e643ef489a84a141eb",
+          "explorer_url": "https://sepolia.basescan.org/tx/0x0da43cbd493bd62dd795ec3c9ee7107bbcda071d2a0630e643ef489a84a141eb"
+        }
+      }
+    }
+  }
+}
